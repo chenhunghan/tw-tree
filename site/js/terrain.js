@@ -42,16 +42,25 @@ export function worldToDisplayUtm(frame, wx, wz) { return [wx + frame.ox, frame.
 
 const vertexDecl = /* glsl */`
 attribute float aFa; attribute float aFb; attribute float aNa; attribute float aNb; attribute float aOwn; attribute float aLand;
-uniform float uT; varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld;`;
+uniform float uT; varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld; varying vec3 vNw;`;
 const fragDecl = /* glsl */`
-varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld;
+varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld; varying vec3 vNw;
 ${CLOUD_GLSL}
 ${WATER_GLSL}
 float th12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 float tvn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(th12(i), th12(i + vec2(1, 0)), f.x), mix(th12(i + vec2(0, 1)), th12(i + vec2(1, 1)), f.x), f.y); }
-vec3 treeRamp(float f) {
-  vec3 bare = vec3(0.60, 0.57, 0.51), grass = vec3(0.42, 0.52, 0.30), forest = vec3(0.12, 0.28, 0.14);
+// Lightness follows tree fraction (the legend ramp); hue varies with terrain so the land reads like Taiwan:
+// a field/town mosaic in the lowlands, rock on steep slopes, alpine grass above ~2,800 m, darker montane conifers.
+vec3 treeRamp(float f, float elev, float slope, vec2 xz) {
+  float parcel = th12(floor(xz / vec2(70.0, 110.0)) + floor(xz.yx / 420.0) * 0.37);
+  vec3 bare = mix(vec3(0.63, 0.59, 0.51), vec3(0.53, 0.56, 0.40), step(0.58, parcel));
+  bare = mix(bare, vec3(0.68, 0.64, 0.55), step(0.86, parcel));
+  bare = mix(bare, vec3(0.60, 0.57, 0.51), smoothstep(120.0, 500.0, elev));
+  bare = mix(bare, vec3(0.49, 0.46, 0.42), smoothstep(0.22, 0.48, slope));
+  bare = mix(bare, vec3(0.62, 0.60, 0.43), smoothstep(2600.0, 3100.0, elev) * (1.0 - smoothstep(0.3, 0.55, slope)));
+  vec3 grass = mix(vec3(0.42, 0.52, 0.30), vec3(0.45, 0.50, 0.33), smoothstep(1500.0, 3000.0, elev));
+  vec3 forest = mix(vec3(0.13, 0.30, 0.13), vec3(0.08, 0.21, 0.15), smoothstep(1200.0, 2600.0, elev));
   return f < 0.5 ? mix(bare, grass, f * 2.0) : mix(grass, forest, (f - 0.5) * 2.0);
 }`;
 
@@ -68,14 +77,14 @@ export function makeTerrainMaterial(uniforms) {
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vF = mix(aFa, aFb, uT) / 100.0;
         vNd = mix(aNa, aNb, uT);
-        vOwn = aOwn; vLand = aLand; vH = position.y;
+        vOwn = aOwn; vLand = aLand; vH = position.y; vNw = objectNormal;
         vWorld = (modelMatrix * vec4(position, 1.0)).xyz;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${fragDecl}`)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `
         if (vOwn < 0.5) discard;                                    // another tile (zone 51) owns this location
         if (vLand < 0.5 && vH < 0.75) discard;                      // open sea: the sea plane draws it
-        vec3 c = treeRamp(clamp(vF, 0.0, 1.0));
+        vec3 c = treeRamp(clamp(vF, 0.0, 1.0), vH / ${EXAG.toFixed(2)}, 1.0 - normalize(vNw).y, vWorld.xz);
         c *= 0.9 + 0.12 * tvn(vWorld.xz / 14.0) + 0.06 * tvn(vWorld.xz / 3.0);
         float stripe = step(0.5, fract((vWorld.x + vWorld.z) / 60.0));
         vec3 grey = vec3(dot(c, vec3(0.3, 0.59, 0.11)));
