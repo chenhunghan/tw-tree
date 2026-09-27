@@ -85,7 +85,7 @@ export function makeTerrainMaterial(uniforms) {
       .replace('#include <common>', `#include <common>\n${fragDecl}`)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `
         if (vOwn < 0.5) discard;                                    // another tile (zone 51) owns this location
-        if (vLand < 0.5 && vH < 0.75) discard;                      // open sea: the sea plane draws it
+        if (vLand < 0.18 && vH < 6.0) discard;                      // sea-level water (DEM < 4 m): the sea plane draws it
         vec3 c = treeRamp(clamp(vF, 0.0, 1.0), vH / ${EXAG.toFixed(2)}, 1.0 - normalize(vNw).y, vWorld.xz);
         c *= 0.9 + 0.12 * tvn(vWorld.xz / 14.0) + 0.06 * tvn(vWorld.xz / 3.0);
         float stripe = step(0.5, fract((vWorld.x + vWorld.z) / 60.0));
@@ -95,13 +95,21 @@ export function makeTerrainMaterial(uniforms) {
         float isB = step(0.5, vBuilt) * step(1900.0 + vBuilt, uYearF + 0.5);
         float urb = isB * clamp(0.3 + 0.7 * vBs / 100.0, 0.0, 1.0) * (1.0 - clamp(vF * 1.4, 0.0, 1.0));
         c = mix(c, vec3(0.64, 0.63, 0.61) * (0.92 + 0.12 * tvn(vWorld.xz / 40.0)), urb * 0.8);
+        // beaches: low-lying land right at the coast (only where the tile has a water mask)
+        float coast = smoothstep(0.98, 0.6, vLand) * step(0.3, vLand) * (1.0 - smoothstep(3.0, 9.0, vH));
+        c = mix(c, vec3(0.80, 0.75, 0.62) * (0.94 + 0.1 * tvn(vWorld.xz / 6.0)), coast * (1.0 - vF) * 0.85);
         float shade = cloudShadow(vWorld);
         c *= shade;
         vec4 diffuseColor = vec4(c, opacity);`)
       .replace('#include <opaque_fragment>', `#include <opaque_fragment>
         // water: DEM <= 0 m (soft edge) or WorldCover water
         float wm = max(1.0 - smoothstep(0.3, 1.2, vH), smoothstep(0.65, 0.35, vLand));
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, waterShade(vWorld, 0.35 + 0.65 * uDay) * shade, wm);
+        vec3 wcol = waterShade(vWorld, 0.35 + 0.65 * uDay) * shade;
+        // a moving foam line where the sea meets land
+        float surf = tvn(vWorld.xz / 5.0 + vec2(uWaterT * 0.6, uWaterT * 0.2)) * tvn(vWorld.xz / 13.0 - uWaterT * 0.15);
+        float foam = smoothstep(0.32, 0.5, vLand) * (1.0 - smoothstep(0.5, 0.62, vLand)) * smoothstep(0.12, 0.35, surf);
+        wcol = mix(wcol, vec3(0.92, 0.95, 0.96) * (0.35 + 0.65 * uDay), foam * 0.85 * (1.0 - smoothstep(1500.0, 5000.0, length(cameraPosition - vWorld))));
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, wcol, wm);
         // city lights at night: warm, flickering speckle scaled by built-up share
         // near: sparse street lamps (the 3D buildings carry the windows); far: a warm glow of the whole built-up area
         float camD = length(cameraPosition - vWorld);

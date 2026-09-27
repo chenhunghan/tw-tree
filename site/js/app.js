@@ -55,7 +55,7 @@ scene.add(sun, sun.target);
 const weather = new Weather(scene);
 const uniforms = { uT: { value: 0 }, uTime: { value: 0 }, uSunView: { value: new THREE.Vector3() }, uYearF: { value: 1984 }, ...weather.uniforms };
 const sea = new THREE.Mesh(new THREE.PlaneGeometry(4000000, 4000000), makeWaterMaterial(uniforms));
-sea.rotation.x = -Math.PI / 2; sea.position.y = -4; sea.receiveShadow = true;
+sea.rotation.x = -Math.PI / 2; sea.position.y = -1.5; sea.receiveShadow = true;
 scene.add(sea);
 
 // Post-processing (as in lns-lab): MSAA half-float target, faint bloom, tilt-shift "miniature" blur, grade, output.
