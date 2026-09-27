@@ -81,6 +81,30 @@ def call(fn, tries=6):
             time.sleep(min(120, 5 * 2 ** k))
 
 
+def pixels(img, zone, i, j):
+    arr = call(lambda: ee.data.computePixels({"expression": img, "fileFormat": "NUMPY_NDARRAY",
+                                              "grid": g.tile_grid(zone, i, j)}))
+    return {k: arr[k] for k in arr.dtype.names}
+
+
+def dn_from_reflectance(sr, s, pids):
+    """Invert scaling + sensor calibration: calibrated float32 reflectance -> the exact integer DN (error ~0.001 DN)."""
+    dn = np.zeros(sr.shape, "u2")
+    ok = s != g.NODATA_S
+    sensor = np.array([p[:4] for p in pids])[s[ok]] if len(pids) else np.array([])
+    for key in np.unique(sensor):
+        m = np.zeros(s.shape, bool); m[ok] = sensor == key
+        x = sr[m].astype("f8")
+        co = g.calibration(key)
+        if co:
+            x = (x - np.array(co[1])) / np.array(co[0])
+        v = (x + 0.2) / 0.0000275
+        if np.abs(v - np.round(v)).max() > 0.05:
+            raise ValueError(f"DN reconstruction not integral for {key}")
+        dn[m] = np.round(v).astype("u2")
+    return dn
+
+
 def fetch_year(cache, zone, i, j, year, sensors=None):
     out = cache / f"{year}.npz"
     if out.exists():
@@ -92,10 +116,20 @@ def fetch_year(cache, zone, i, j, year, sensors=None):
         np.savez_compressed(out, dn=np.zeros(shape + (6,), "u2"), s=np.full(shape, g.NODATA_S, "u2"),
                             n=np.zeros(shape, "u1"), pids=np.array([], dtype=str))
         return year, "no scenes"
-    arr = call(lambda: ee.data.computePixels({"expression": img, "fileFormat": "NUMPY_NDARRAY",
-                                              "grid": g.tile_grid(zone, i, j)}))
-    dn = np.stack([arr[b] for b in g.DN], -1).astype("u2")
-    np.savez_compressed(out, dn=dn, s=arr["s"], n=arr["n"], pids=np.array(pid_list))
+    try:
+        arr = pixels(img, zone, i, j)
+        dn, src = np.stack([arr[b] for b in g.DN], -1).astype("u2"), "ee"
+    except Exception as e:
+        # Years with ~90 scenes can exceed Earth Engine's per-request memory when the six DN bands ride along.
+        # Fetch the calibrated reflectance instead (the same medoid) and invert it to the identical integer DN.
+        if "memory" not in str(e).lower():
+            raise
+        comp, _ = g.composite(g.tile_bounds_geom(zone, i, j), year, zone, sensors=sensors)
+        arr = pixels(ee.Image.cat([comp.select(g.BANDS).unmask(-1).toFloat(),
+                                   comp.select("s").unmask(g.NODATA_S).toUint16(),
+                                   comp.select("n").unmask(0).toUint8()]), zone, i, j)
+        dn, src = dn_from_reflectance(np.stack([arr[b] for b in g.BANDS], -1), arr["s"], pid_list), "reflectance"
+    np.savez_compressed(out, dn=dn, s=arr["s"], n=arr["n"], pids=np.array(pid_list), dn_source=np.array(src))
     return year, f"{len(pid_list)} scenes"
 
 
