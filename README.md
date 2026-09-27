@@ -4,7 +4,7 @@ A 3D map of tree cover across Taiwan from 1984 to 2026. Each 30 m Landsat pixel'
 procedural three.js trees on custom terrain. A timeline autoplays and can be scrubbed; search by coordinates,
 device location or a Traditional Chinese address.
 
-- **Site:** `site/` (plain HTML + ES modules, three.js from a CDN, no build step), deployed to GitHub Pages.
+- **Site:** <https://chenhunghan.github.io/tw-tree/> (`site/`: plain HTML + ES modules, three.js from a CDN, no build step).
 - **Data:** the Hugging Face dataset [chenhunghan/tw-tree](https://huggingface.co/datasets/chenhunghan/tw-tree)
   (CC BY 4.0). The browser reads the tiles from there; they are not stored in this repo.
 - **Pipeline:** `pipeline/` (Python run with `uv run`; Google Earth Engine). Every stored value traces to one raw
@@ -19,6 +19,11 @@ cd site && python3 -m http.server
 # open http://localhost:8000/            (data from Hugging Face)
 # or   http://localhost:8000/?data=./data/<name>/   for locally exported tiles
 ```
+
+## License
+
+Code: [MIT](LICENSE). Data on Hugging Face: CC BY 4.0. `data/taipei_parks_halfyear_ods/`: Taipei City open-data
+declaration (free reuse with attribution).
 
 ## Attribution
 
