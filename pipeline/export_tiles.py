@@ -28,7 +28,9 @@ import gee_common as g
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ATTRIBUTION = ("Landsat Collection 2 Level-2 courtesy of the U.S. Geological Survey; "
-               "ESA WorldCover 2021 v200 (CC BY 4.0); Copernicus DEM GLO-30 (c) DLR/Airbus, provided under COPERNICUS by the EU and ESA")
+               "ESA WorldCover 2021 v200 (CC BY 4.0); Copernicus DEM GLO-30 (c) DLR/Airbus, provided under COPERNICUS by the EU and ESA; "
+               "Hansen/UMD/Google/USGS/NASA Global Forest Change 2000-2025 v1.13 (CC BY 4.0); GISA 1972-2021, Ren et al. 2025 (CC BY 4.0); "
+               "JRC GHSL P2023A GHS-BUILT-H/GHS-BUILT-S (European Commission, JRC)")
 OV = 16                         # overview block size in pixels (480 m)
 TRANSIENT = ("429", "Too Many", "timed out", "503", "500", "deadline", "Deadline", "Computation timed out",
              "Connection", "capacity", "Internal error")
@@ -60,6 +62,12 @@ def static_image(zone):
     proj = ee.Projection(f"EPSG:{g.epsg(zone)}", [g.RES, 0, g.EDGE, 0, -g.RES, g.EDGE])
     han = ee.Image("UMD/hansen/global_forest_change_2025_v1_13")
     wc = ee.ImageCollection("ESA/WorldCover/v200").first().select("Map")
+    # Built-up context (display only): GISA first impervious year (1 = 1972, 2 = 1978, v >= 3 -> 1982 + v; 0 = never),
+    # stored as year - 1900; GHSL 2018 building height (m, 100 m) and built surface share of the pixel (%, from 10 m).
+    gisa = ee.Image("projects/sat-io/open-datasets/GISA_1972_2021").select(0)
+    built = gisa.add(82).where(gisa.eq(1), 72).where(gisa.eq(2), 78).where(gisa.eq(0), 0)
+    bh = ee.ImageCollection("JRC/GHSL/P2023A/GHS_BUILT_H").first().select("built_height")
+    bs = ee.ImageCollection("JRC/GHSL/P2023A/GHS_BUILT_S_10m").first().select(0)
     return ee.Image.cat([
         g.elevation(),
         wc.eq(80).toFloat().reduceResolution(ee.Reducer.mean(), maxPixels=1024).reproject(proj)
@@ -68,6 +76,9 @@ def static_image(zone):
         han.select("treecover2000").reproject(proj).unmask(255).toUint8().rename("tc2000"),
         han.select("lossyear").unmask(0).gt(0).reduceResolution(ee.Reducer.max(), maxPixels=64).reproject(proj)
            .unmask(0).toUint8().rename("loss"),
+        built.reproject(proj).unmask(0).toUint8().rename("built"),
+        bh.reproject(proj).round().clamp(0, 255).unmask(0).toUint8().rename("bh"),
+        bs.reduceResolution(ee.Reducer.mean(), maxPixels=64).reproject(proj).round().clamp(0, 100).unmask(0).toUint8().rename("bs"),
     ])
 
 
@@ -133,7 +144,7 @@ def fetch_year(cache, zone, i, j, year, sensors=None):
     return year, f"{len(pid_list)} scenes"
 
 
-STATIC = ("z", "water", "wc", "tc2000", "loss")
+STATIC = ("z", "water", "wc", "tc2000", "loss", "built", "bh", "bs")
 
 
 def fetch_static(cache, zone, i, j):
@@ -192,7 +203,7 @@ def filled(fcols):
     return [np.where(a == g.NODATA_F, 0, a) for a in out]
 
 
-def overview(zone, i, j, z, own, land, fcols, years):
+def overview(zone, i, j, z, own, land, fcols, years, ctx):
     """480 m block means: tree % over owned land pixels (255 if none observed), mean elevation over owned pixels,
     own = at least half the block owned, land = at least half of the owned pixels are land."""
     B = g.TILE // OV
@@ -209,6 +220,14 @@ def overview(zone, i, j, z, own, land, fcols, years):
     cols = {"zone": np.full(B * B, zone, "u1"), "i": np.full(B * B, i, "i2"), "j": np.full(B * B, j, "i2"),
             "x_utm": X.ravel().astype("i4"), "y_utm": Y.ravel().astype("i4"), "z_m": zmean,
             "own": (n_own * 2 >= OV * OV).astype("u1"), "land": (ol.sum(1) * 2 >= np.maximum(n_own, 1)).astype("u1")}
+    bb = blk(ctx["built"].reshape(g.TILE, g.TILE)).astype(float)
+    bsb = blk(ctx["bs"].reshape(g.TILE, g.TILE)).astype(float)
+    n_ol = np.maximum(ol.sum(1), 1)
+    cols["bs"] = ((bsb * ol).sum(1) / n_ol).round().astype("u1")                   # mean built-up share
+    bmask = ol & (bb > 0)
+    med = np.array([np.median(bb[r][bmask[r]]) if bmask[r].any() else 0 for r in range(bb.shape[0])])
+    cols["built"] = med.round().astype("u1")                                        # median first-built year - 1900
+    cols["built_share"] = ((bmask.sum(1) / n_ol) * 100).round().astype("u1")       # % of land ever built
     for yr, f in zip(years, fcols):
         fb = blk(f.reshape(g.TILE, g.TILE)).astype(float)
         v = ol & (fb != g.NODATA_F)
@@ -250,10 +269,14 @@ def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
         "f": "tree fraction percent 0-100: model applied to the calibrated raw DN of the medoid observation; 255 = no data",
         "own": "1 = canonical pixel for this location; 0 = a zone-51 tile also covers it (use that one)",
         "land": "1 = land (ESA WorldCover 2021 permanent water < 50 % of the pixel); stats and the app use land pixels only",
+        "built": "first year impervious minus 1900 (GISA 1972-2021, Ren et al. 2025, CC BY 4.0; 72 = by 1972, 78 = 1978-84); 0 = never; display only",
+        "bh": "building height m (JRC GHSL GHS-BUILT-H 2018, 100 m); display only",
+        "bs": "built-up surface % of the pixel (JRC GHSL GHS-BUILT-S 2018, 10 m averaged); display only",
         "z_m": "Copernicus DEM GLO-30 (2024_1), bilinear to pixel centre, display only",
         "generated": datetime.date.today().isoformat(), "attribution": ATTRIBUTION,
     }
-    frac = pa.table({"x_utm": x, "y_utm": y, "z_m": z, "own": own, "land": land, **fcols},
+    ctx = {k: st[k].ravel().astype("u1") for k in ("built", "bh", "bs")}
+    frac = pa.table({"x_utm": x, "y_utm": y, "z_m": z, "own": own, "land": land, **ctx, **fcols},
                     metadata={"tpetree": json.dumps(meta, ensure_ascii=False)})
     prov_meta = dict(meta, s="index into scenes[year] (Landsat product IDs); 65535 = none",
                      n="distinct clear acquisition dates in the year",
@@ -263,7 +286,7 @@ def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
     outdir.mkdir(parents=True, exist_ok=True)
     write_arrow(outdir / f"{i}_{j}.frac.arrow.gz", frac)
     write_arrow(outdir / f"{i}_{j}.prov.arrow.gz", prov)
-    return stats, overview(zone, i, j, z, own, land, list(fcols.values()), years)
+    return stats, overview(zone, i, j, z, own, land, list(fcols.values()), years, ctx)
 
 
 _RF = None

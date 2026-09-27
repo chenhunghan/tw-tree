@@ -142,6 +142,7 @@ site/                     static app (GitHub Pages root); open with `python3 -m 
   js/geo.js               UTM<->WGS84 (Krüger series; matches pyproj to 0.1 mm), coordinate parsing, Nominatim with fallback
   js/terrain.js           per-tile terrain mesh at exact pixel centres, GPU year blending
   js/trees.js             procedural instanced broadleaf/conifer trees, 4 slots per pixel
+  js/buildings.js         illustrative instanced buildings from GISA first-built year + GHSL height/share
   js/weather.js           decorative sky/weather: sun and moon path, sky colours, stars, drifting clouds + cloud
                           shadows, wind, rain; shared water shader (rivers, lakes, sea)
 site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>/<i>_<j>.{frac,prov}.arrow.gz (published to HF)
@@ -204,7 +205,14 @@ The v2 pilot total rose from ~54 % (2013) to ~64 % (2021) and then stayed flat. 
 - **Land:** frac tiles have `land` (1 = WorldCover 2021 permanent water < 50 %). The model gives open sea a nonzero,
   sensor-dependent "tree fraction" (Matsu tiles showed a fake 2024 collapse), so stats, the overview and trees use land
   pixels only; `f` is still stored for water. The app lets the sea plane show through sea-level water pixels.
-- **Format v2 tiles** (`tpetree tile v2`): frac `x_utm, y_utm, z_m, own, land, f<year>`; `overview.arrow.gz` (480 m blocks
+- **Built-up context (2026-09-28):** static layers add `built` (GISA 1972–2021 first impervious year − 1900; code 1 = 1972,
+  2 = 1978, v ≥ 3 → 1982 + v), `bh` (GHSL GHS-BUILT-H 2018 m) and `bs` (GHS-BUILT-S 2018 10 m share %), all display-only and
+  CC BY-compatible. Sources compared: OSM/Overture footprints are ODbL (≈13 % / ≈2M buildings in Taiwan), Microsoft and
+  Google footprints do not cover Taiwan, NLSC 3D buildings are not open data, and no open source has per-building
+  construction dates. The app draws illustrative instanced buildings (1–3 per built pixel by `bs`, height from `bh`) that
+  rise in the pixel's first-built year, tints built-up ground once that year passes, and shows city lights at night.
+  GISA only records first construction (no demolition or re-greening) and ends in 2021.
+- **Format v2 tiles** (`tpetree tile v2`): frac `x_utm, y_utm, z_m, own, land, built, bh, bs, f<year>`; `overview.arrow.gz` (480 m blocks
   of owned land pixels); index.json `totals` (gap-filled and observed land tree hectares per year), `complete`,
   `tiles_planned`, `scenes_per_year_zone`. Gzip is written with mtime 0, so unchanged tiles are byte-identical and are not
   re-uploaded.

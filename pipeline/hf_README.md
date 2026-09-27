@@ -31,12 +31,16 @@ Releases:
 taiwan/index.json                 tiles, years, scene counts per zone, model, island totals (land pixels only)
 taiwan/overview.arrow.gz          480 m block means per tile: zone, i, j, x_utm, y_utm, z_m, own, land, f<year>
 taiwan/summary.parquet            per tile x year: owned/land/valid pixels, observed and gap-filled tree hectares
-taiwan/<zone>/<i>_<j>.frac.arrow.gz   x_utm, y_utm, z_m, own, land, f<year>
+taiwan/<zone>/<i>_<j>.frac.arrow.gz   x_utm, y_utm, z_m, own, land, built, bh, bs, f<year>
 taiwan/<zone>/<i>_<j>.prov.arrow.gz   x_utm, y_utm, s<year>, n<year>
 ```
 
 - `own`: 1 = canonical pixel for this location. Where a zone-50 tile overlaps a zone-51 tile along the zone boundary,
   the zone-50 pixels are `own = 0` (use the zone-51 tile). Every location is counted once.
+- `built`, `bh`, `bs` (display context, resampled onto the grid, not measured by this project): first year the pixel was
+  impervious minus 1900 from GISA 1972–2021 (72 = by 1972, 78 = 1978–84, 0 = never); building height in metres (JRC GHSL
+  GHS-BUILT-H 2018, 100 m); built-up surface share % (GHS-BUILT-S 2018, 10 m averaged). The viewer draws illustrative
+  buildings from them. The overview adds `bs` (mean), `built` (median first-built year) and `built_share`.
 - `land`: 1 = land (ESA WorldCover 2021 permanent water < 50 % of the pixel). `f` is still stored for water pixels (it
   is the model's raw output), but totals and the viewer use land pixels only.
 
@@ -131,5 +135,8 @@ pixels, local tree fraction within 1 point of Earth Engine's (99.8–100 % exact
 - ESA WorldCover 2021 v200 © ESA WorldCover project, CC BY 4.0.
 - Copernicus DEM GLO-30 © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by
   the European Union and ESA.
+- Hansen, M. C. et al. Global Forest Change 2000–2025 v1.13 (University of Maryland), CC BY 4.0 (stable-forest checks).
+- GISA 1972–2021: Ren, H., Huang, X., Yang, J., Zhou, G. (2025), ISPRS J. Photogramm. Remote Sens. 220, 354–376. CC BY 4.0.
+- JRC GHSL P2023A GHS-BUILT-H and GHS-BUILT-S (2018), European Commission, Joint Research Centre.
 
 This dataset (derived tree fraction, provenance and summaries) is released under **CC BY 4.0**.

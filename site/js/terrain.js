@@ -41,10 +41,12 @@ export function toWorld(frame, zone, x, y, z) {
 export function worldToDisplayUtm(frame, wx, wz) { return [wx + frame.ox, frame.oy - wz]; }
 
 const vertexDecl = /* glsl */`
-attribute float aFa; attribute float aFb; attribute float aNa; attribute float aNb; attribute float aOwn; attribute float aLand;
-uniform float uT; varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld; varying vec3 vNw;`;
+attribute float aFa; attribute float aFb; attribute float aNa; attribute float aNb; attribute float aOwn; attribute float aLand; attribute float aBuilt; attribute float aBs;
+uniform float uT; varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld; varying vec3 vNw;
+varying float vBuilt; varying float vBs;`;
 const fragDecl = /* glsl */`
 varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld; varying vec3 vNw;
+varying float vBuilt; varying float vBs; uniform float uYearF; uniform float uNight;
 ${CLOUD_GLSL}
 ${WATER_GLSL}
 float th12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
@@ -64,7 +66,7 @@ vec3 treeRamp(float f, float elev, float slope, vec2 xz) {
   return f < 0.5 ? mix(bare, grass, f * 2.0) : mix(grass, forest, (f - 0.5) * 2.0);
 }`;
 
-const WEATHER_UNIFORMS = ['uCloud', 'uCloudOff', 'uSunDir', 'uCloudH', 'uDay', 'uSkyTop', 'uSkyHor', 'uSunCol', 'uWindS', 'uWaterT'];
+const WEATHER_UNIFORMS = ['uCloud', 'uCloudOff', 'uSunDir', 'uCloudH', 'uDay', 'uSkyTop', 'uSkyHor', 'uSunCol', 'uWindS', 'uWaterT', 'uNight', 'uYearF'];
 export const shareUniforms = (sh, uniforms, names = WEATHER_UNIFORMS) => { for (const n of names) sh.uniforms[n] = uniforms[n]; };
 
 export function makeTerrainMaterial(uniforms) {
@@ -77,7 +79,7 @@ export function makeTerrainMaterial(uniforms) {
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vF = mix(aFa, aFb, uT) / 100.0;
         vNd = mix(aNa, aNb, uT);
-        vOwn = aOwn; vLand = aLand; vH = position.y; vNw = objectNormal;
+        vOwn = aOwn; vLand = aLand; vH = position.y; vNw = objectNormal; vBuilt = aBuilt; vBs = aBs;
         vWorld = (modelMatrix * vec4(position, 1.0)).xyz;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${fragDecl}`)
@@ -89,13 +91,23 @@ export function makeTerrainMaterial(uniforms) {
         float stripe = step(0.5, fract((vWorld.x + vWorld.z) / 60.0));
         vec3 grey = vec3(dot(c, vec3(0.3, 0.59, 0.11)));
         c = mix(c, mix(grey, grey * 0.8, stripe), 0.75 * vNd);
+        // built-up ground (GISA first-built year reached by the timeline): concrete tint where trees are few
+        float isB = step(0.5, vBuilt) * step(1900.0 + vBuilt, uYearF + 0.5);
+        float urb = isB * clamp(0.3 + 0.7 * vBs / 100.0, 0.0, 1.0) * (1.0 - clamp(vF * 1.4, 0.0, 1.0));
+        c = mix(c, vec3(0.64, 0.63, 0.61) * (0.92 + 0.12 * tvn(vWorld.xz / 40.0)), urb * 0.8);
         float shade = cloudShadow(vWorld);
         c *= shade;
         vec4 diffuseColor = vec4(c, opacity);`)
       .replace('#include <opaque_fragment>', `#include <opaque_fragment>
         // water: DEM <= 0 m (soft edge) or WorldCover water
         float wm = max(1.0 - smoothstep(0.3, 1.2, vH), smoothstep(0.65, 0.35, vLand));
-        gl_FragColor.rgb = mix(gl_FragColor.rgb, waterShade(vWorld, 0.35 + 0.65 * uDay) * shade, wm);`);
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, waterShade(vWorld, 0.35 + 0.65 * uDay) * shade, wm);
+        // city lights at night: warm, flickering speckle scaled by built-up share
+        // near: sparse street lamps (the 3D buildings carry the windows); far: a warm glow of the whole built-up area
+        float camD = length(cameraPosition - vWorld);
+        float far = smoothstep(4000.0, 20000.0, camD);
+        float lamp = mix(step(0.88, th12(floor(vWorld.xz / 9.0))) * 1.6, 0.4 + 1.0 * pow(th12(floor(vWorld.xz / 60.0)), 2.0), far);
+        gl_FragColor.rgb += vec3(1.0, 0.7, 0.36) * isB * (vBs / 100.0) * uNight * lamp * mix(0.35, 1.3, far) * (1.0 - wm);`);
   };
   return m;
 }
@@ -126,6 +138,7 @@ export function buildTerrain(tile, lookup, frame, material) {
   const srcK = new Uint32Array(N * N), srcRef = new Uint8Array(N * N);
   const refs = [tile, east, south, se];
   const pos = new Float32Array(N * N * 3), own = new Float32Array(N * N), land = new Float32Array(N * N);
+  const built = new Float32Array(N * N), bs = new Float32Array(N * N);
   for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
     const v = r * N + c;
     let ref = 0, rr = r, cc = c;
@@ -136,6 +149,7 @@ export function buildTerrain(tile, lookup, frame, material) {
     srcRef[v] = ref; srcK[v] = k;
     own[v] = t.own ? t.own[k] : 1;
     land[v] = t.land ? t.land[k] : 1;
+    built[v] = t.built ? t.built[k] : 0; bs[v] = t.bs ? t.bs[k] : 0;
     const x = tile.x0 + res * c + res / 2, y = tile.y0 + tileM - res * r - res / 2;
     const [wx, wy, wz] = toWorld(frame, tile.zone, x, y, t.z[k]);
     pos[v * 3] = wx; pos[v * 3 + 1] = wy; pos[v * 3 + 2] = wz;
@@ -153,6 +167,8 @@ export function buildTerrain(tile, lookup, frame, material) {
   for (const name of ['aFa', 'aFb', 'aNa', 'aNb']) geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(N * N), 1));
   geo.setAttribute('aOwn', new THREE.BufferAttribute(own, 1));
   geo.setAttribute('aLand', new THREE.BufferAttribute(land, 1));
+  geo.setAttribute('aBuilt', new THREE.BufferAttribute(built, 1));
+  geo.setAttribute('aBs', new THREE.BufferAttribute(bs, 1));
   geo.computeBoundingSphere();
   const mesh = new THREE.Mesh(geo, material);
   mesh.userData = { tile, refs, srcRef, srcK };

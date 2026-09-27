@@ -144,7 +144,7 @@
 <canvas id="minimap" class="panel" hidden title="小地圖：點一下飛過去" aria-label="小地圖"></canvas>
 
 <div class="panel" id="credits">
-  Landsat: USGS · ESA WorldCover 2021 (CC BY 4.0) · Copernicus DEM · 地址搜尋 ©
+  Landsat: USGS · ESA WorldCover 2021 (CC BY 4.0) · Copernicus DEM · GISA (CC BY 4.0) · JRC GHSL · 地址搜尋 ©
   <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (Nominatim)
 </div>
 
@@ -172,12 +172,15 @@
       <li>某年沒有清晰觀測的像元，畫面沿用前一次觀測並以灰色條紋標示，不會被當成樹冠變化。</li>
       <li>地形高度來自 Copernicus DEM GLO-30，僅供顯示，並放大 1.5 倍。</li>
       <li>天氣、雲、風、雨與日夜只是畫面效果，不是實際氣象資料；雲影也不影響樹冠數值。</li>
+      <li><b>建築物是示意：</b>某像元在 GISA 資料中第一次成為不透水面（建成）的那一年，建築才會長出來；數量依 GHSL 2018 的建成面積比例，高度依 GHSL 2018 的建物高度，位置與形狀是程式產生的，不是真實建物輪廓。GISA 只記錄「第一次建成」，所以拆除、改建或都市綠化不會顯示；2021 年以後新建的也還沒有。夜間燈光同樣只是示意。</li>
       <li>地址搜尋使用 OpenStreetMap 的 Nominatim；臺灣門牌資料不完整，找不到時會逐步退到巷弄、路段或行政區，並顯示達到的精度。</li>
     </ul>
     <h3>來源</h3>
     <ul>
       <li>Landsat Collection 2 Level-2 courtesy of the U.S. Geological Survey（經 Google Earth Engine 處理）</li>
       <li>ESA WorldCover 2021 v200，CC BY 4.0</li>
+      <li>建成年份：GISA 1972–2021（Ren, Huang, Yang &amp; Zhou 2025, ISPRS J. Photogramm. Remote Sens. 220），CC BY 4.0</li>
+      <li>建物高度與建成面積：JRC GHSL P2023A（GHS-BUILT-H 2018、GHS-BUILT-S 2018 10 m），European Commission, Joint Research Centre</li>
       <li>Copernicus DEM GLO-30 © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA</li>
       <li>地址搜尋：Nominatim / © OpenStreetMap contributors（ODbL）</li>
     </ul>

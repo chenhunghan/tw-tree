@@ -12,6 +12,7 @@ import { lonLatToUtm, utmToLonLat, parseCoords, geocode } from './geo.js';
 import { EXAG, DISPLAY_ZONE, prepareFilled, buildTerrain, setTerrainYears, makeTerrainMaterial, makeWaterMaterial, toWorld, worldToDisplayUtm } from './terrain.js';
 import { Weather, PRESETS } from './weather.js';
 import { Forest, NEAR_DIST } from './trees.js';
+import { City } from './buildings.js';
 
 const params = new URLSearchParams(location.search);
 const HF = 'https://huggingface.co/datasets/chenhunghan/tw-tree/resolve/main/';
@@ -52,7 +53,7 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.8;
 scene.add(sun, sun.target);
 const weather = new Weather(scene);
-const uniforms = { uT: { value: 0 }, uTime: { value: 0 }, uSunView: { value: new THREE.Vector3() }, ...weather.uniforms };
+const uniforms = { uT: { value: 0 }, uTime: { value: 0 }, uSunView: { value: new THREE.Vector3() }, uYearF: { value: 1984 }, ...weather.uniforms };
 const sea = new THREE.Mesh(new THREE.PlaneGeometry(4000000, 4000000), makeWaterMaterial(uniforms));
 sea.rotation.x = -Math.PI / 2; sea.position.y = -4; sea.receiveShadow = true;
 scene.add(sea);
@@ -91,6 +92,7 @@ function resize() {
 resize();
 const terrainMat = makeTerrainMaterial(uniforms);
 const forest = new Forest(scene, uniforms);
+const city = new City(scene, uniforms);
 const terrain = [];                      // meshes that can be picked (detailed + overview)
 const detail = new Map();                // tile key -> detailed mesh
 const coarse = new Map();                // tile key -> overview mesh
@@ -365,6 +367,7 @@ function setYearPos(p) {
     forest.setYears(yA, yB);
   }
   uniforms.uT.value = t;
+  uniforms.uYearF.value = yA + (yB - yA) * t;          // continuous year: buildings rise as the timeline passes
   const shown = years[Math.round(yearPos)];
   $('yearLabel').textContent = shown;
   $('slider').value = yearPos / (years.length - 1);
@@ -400,14 +403,15 @@ controls.addEventListener('change', () => { if (userDragging || fly) lastMove = 
 function updateTrees() {
   if (!years.length) return;
   const dist = camera.position.distanceTo(controls.target);
-  if (dist > 14000) { forest.visible = false; return; }
-  forest.visible = true;
+  if (dist > 14000) { forest.visible = false; city.visible = false; return; }
+  forest.visible = true; city.visible = true;
   const radius = THREE.MathUtils.clamp(dist * 0.75, 700, 2400);
   const moved = !lastFocus || lastFocus.distanceTo(controls.target) > radius * 0.3 ||
     Math.abs(radius - lastRadius) / lastRadius > 0.35 || lastCam.distanceTo(camera.position) > Math.max(150, dist * 0.2);
   if (moved && performance.now() - lastMove > 200) {
     lastFocus = controls.target.clone(); lastRadius = radius; lastCam = camera.position.clone();
     forest.build(ds, frame, lastFocus, radius, years, lastCam);
+    city.build(ds, frame, lastFocus, radius * 1.3);
     const k = Math.min(Math.floor(yearPos), years.length - 2);
     forest.setYears(years[k], years[k + 1]);
   }
@@ -667,7 +671,7 @@ window.__app = {
   setYear: (y) => { playing = false; updatePlayButton(); setYearPos(years.indexOf(y)); },
   advance: (sec) => { for (let i = 0; i < sec * 30; i++) step(1 / 30); composer.render(); },
   setMiniature, setFov, weather,
-  flyTo, get trees() { return forest.count; }, get treeStats() { return { ...forest.stats, triangles: Math.round(forest.triangles) }; },
+  flyTo, get trees() { return forest.count; }, get buildings() { return city.n; }, get treeStats() { return { ...forest.stats, triangles: Math.round(forest.triangles) }; },
   renderInfo: () => renderer.info.render,
   view: (lon, lat, dist, elevDeg, azDeg = 200) => {       // test hook: place the camera directly
     const [X, Y] = lonLatToUtm(lon, lat, DISPLAY_ZONE);
