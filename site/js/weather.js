@@ -58,7 +58,7 @@ const WIND_DIR = new THREE.Vector2(-0.72, 0.69);   // blowing toward the south-w
 export class Weather {
   constructor(scene) {
     this.scene = scene;
-    this.hour = 7.5; this.auto = true; this.hoursPerSec = 24 / 240;   // one day in four minutes
+    this.hour = 7.5; this.auto = true; this.hoursPerSec = 24 / 420;   // daylight hours pass in ~3.5 min; night goes twice as fast
     this.preset = 'clear';
     this.cur = { ...PRESETS.clear };
     this.sunDir = new THREE.Vector3(); this.moonDir = new THREE.Vector3(); this.lightDir = new THREE.Vector3();
@@ -81,7 +81,8 @@ export class Weather {
   update(dt, camera, target, dist, { sun, hemi, fog }) {
     const U = this.uniforms, P = PRESETS[this.preset], k = 1 - Math.exp(-dt * 0.8);
     for (const key of ['cloud', 'rain', 'wind']) this.cur[key] += (P[key] - this.cur[key]) * k;
-    if (this.auto) this.hour = (this.hour + dt * this.hoursPerSec) % 24;
+    const nightNow = this.sunDir.y < -0.05 ? 2.2 : 1;
+    if (this.auto) this.hour = (this.hour + dt * this.hoursPerSec * nightNow) % 24;
     // Sun: rises in the east (6 h), culminates ~65° to the south, sets in the west; the moon is opposite.
     const a = Math.PI * (this.hour - 6) / 12, tilt = THREE.MathUtils.degToRad(65);
     this.sunDir.set(Math.cos(a), Math.sin(a) * Math.sin(tilt), Math.sin(a) * Math.cos(tilt)).normalize();
