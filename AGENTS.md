@@ -142,6 +142,8 @@ site/                     static app (GitHub Pages root); open with `python3 -m 
   js/geo.js               UTM<->WGS84 (Krüger series; matches pyproj to 0.1 mm), coordinate parsing, Nominatim with fallback
   js/terrain.js           per-tile terrain mesh at exact pixel centres, GPU year blending
   js/trees.js             procedural instanced broadleaf/conifer trees, 4 slots per pixel
+  js/weather.js           decorative sky/weather: sun and moon path, sky colours, stars, drifting clouds + cloud
+                          shadows, wind, rain; shared water shader (rivers, lakes, sea)
 site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>/<i>_<j>.{frac,prov}.arrow.gz (published to HF)
 .github/workflows/pages.yml  deploys site/ to GitHub Pages on push to main (site/data/ is git-ignored)
 ```
@@ -162,6 +164,13 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   - Coefficients and decisions: `pipeline/model/sensor_calibration.json`. Tile metadata records `harmonisation` and the per-sensor `calibration`.
   - `gee_common.HARMONISATION` defaults to "calibrated" when that file exists; `set_harmonisation("roy")` reproduces v1. The v1 release is kept in `build/releases/pilot_v1`.
 - **Earth Engine stalls:** interactive requests occasionally hang indefinitely (one waited over 70 minutes with no CPU). `gee_common.init()` sets `ee.data.setDeadline(300000)`, so a stall fails after 5 minutes and is retried.
+- **App look (2026-09-28):** logarithmic depth buffer (the view spans 5 m–900 km; without it water z-fought the sea plane
+  and flickered while zooming). Water uses one shader for terrain water pixels and the sea (ripples that fade with
+  distance, Fresnel sky reflection, sun/moon glint). Terrain lightness follows tree fraction (the legend ramp) while hue
+  varies with elevation and slope (lowland field mosaic, rock on steep slopes, alpine grass > 2,800 m, darker montane
+  forest). Weather and time of day are decorative only (URL `?weather=clear|cloudy|rain&hour=0-24`), stated in the about
+  panel. Each visit starts ~1.7 km from a random land pixel with mid-range, changing tree cover; 隨機地點 flies to another.
+  Tree LOD rebuilds ignore autorotation (only user input counts as moving).
 - **Display rule:** when a pixel has no clear observation in a year, the app shows its last observed value (leading gaps are back-filled from the first observation) and greys/stripes it. Stored data keeps 255. Area stats in the header use this filled series over the whole tile area (the pilot rectangle, not the city boundary).
 
 ## Post-2013 rise (investigated 2026-09-27)
