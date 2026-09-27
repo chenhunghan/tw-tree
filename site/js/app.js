@@ -148,6 +148,7 @@ async function load() {
   }
   computeStats(index);
   buildTimeline(index);
+  buildMinimap();
   // start close enough to see trees, at a random place where tree cover changed; then autoplay
   const start = pickStart();
   if (start) viewAt(start);
@@ -248,6 +249,57 @@ function streamTiles(now) {
       pending.get(k)?.(); pending.delete(k);
     }).catch((err) => console.warn(err)).finally(() => loading.delete(k));
   }
+}
+
+// ---------- mini-map: the data itself (latest year), camera focus marker, click to fly ----------
+const mini = { canvas: $('minimap'), scale: 1, x0: 0, z0: 0, base: null };
+function buildMinimap() {
+  const cv = mini.canvas;
+  const cells = [];
+  const add = (t, stepPx) => {
+    const last = t.filled[years[years.length - 1]];
+    for (let r = 0; r < t.P; r += stepPx) for (let c = 0; c < t.P; c += stepPx) {
+      const k = r * t.P + c;
+      if ((t.own && !t.own[k]) || (t.land && !t.land[k]) || (!t.land && t.z[k] <= 0)) continue;
+      const [wx, , wz] = toWorld(frame, t.zone, t.x0 + t.res * (c + 0.5), t.y0 + t.P * t.res - t.res * (r + 0.5), 0);
+      cells.push([wx, wz, last[k]]);
+    }
+  };
+  if (ds.overview.size) for (const t of ds.overview.values()) add(t, 1);
+  else for (const t of ds.tiles.values()) add(t, 8);
+  if (!cells.length) { cv.hidden = true; return; }
+  let xmin = Infinity, xmax = -Infinity, zmin = Infinity, zmax = -Infinity;
+  for (const [x, z] of cells) { xmin = Math.min(xmin, x); xmax = Math.max(xmax, x); zmin = Math.min(zmin, z); zmax = Math.max(zmax, z); }
+  const W = 150, pad = 6, sc = (W - 2 * pad) / Math.max(xmax - xmin, (zmax - zmin) * 0.66);
+  const H = Math.round((zmax - zmin) * sc + 2 * pad);
+  const dpr = Math.min(devicePixelRatio, 2);
+  cv.width = W * dpr; cv.height = H * dpr; cv.style.width = `${W}px`; cv.style.height = `${H}px`;
+  Object.assign(mini, { scale: sc, x0: xmin - pad / sc, z0: zmin - pad / sc, dpr, W, H });
+  const off = document.createElement('canvas'); off.width = cv.width; off.height = cv.height;
+  const g = off.getContext('2d'); g.scale(dpr, dpr);
+  const cell = Math.max(1.2, (ds.overview.size ? 480 : 240) * sc + 0.4);
+  const ramp = (f) => { f /= 100; const a = [220, 212, 194], b = [163, 189, 120], c = [43, 106, 58];
+    const m = f < 0.5 ? a.map((v, i) => v + (b[i] - v) * f * 2) : b.map((v, i) => v + (c[i] - v) * (f - 0.5) * 2);
+    return `rgb(${m.map(Math.round).join(',')})`; };
+  for (const [x, z, f] of cells) { g.fillStyle = ramp(f); g.fillRect((x - mini.x0) * sc - cell / 2, (z - mini.z0) * sc - cell / 2, cell, cell); }
+  mini.base = off;
+  cv.hidden = false;
+  cv.onclick = (e) => {
+    const r = cv.getBoundingClientRect();
+    const wx = (e.clientX - r.left) / sc + mini.x0, wz = (e.clientY - r.top) / sc + mini.z0;
+    const [X, Y] = worldToDisplayUtm(frame, wx, wz), [lon, lat] = utmToLonLat(X, Y, DISPLAY_ZONE);
+    flyTo(lon, lat); pin.visible = false;
+  };
+}
+function drawMinimap() {
+  if (!mini.base) return;
+  const g = mini.canvas.getContext('2d'), { dpr, scale: sc } = mini;
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, mini.canvas.width, mini.canvas.height); g.drawImage(mini.base, 0, 0);
+  g.scale(dpr, dpr);
+  const x = (controls.target.x - mini.x0) * sc, z = (controls.target.z - mini.z0) * sc;
+  const d = camera.position.distanceTo(controls.target), rad = Math.max(3, d * 0.6 * sc);
+  g.strokeStyle = '#d9480f'; g.lineWidth = 1.5; g.beginPath(); g.arc(x, z, rad, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = '#d9480f'; g.beginPath(); g.arc(x, z, 2.5, 0, Math.PI * 2); g.fill();
 }
 
 // ---------- stats ----------
@@ -605,6 +657,7 @@ function step(dt, now = performance.now()) {
   uniforms.uTime.value = now / 1000;
   updateSun();
   updateTrees();
+  if (Math.floor(now / 100) !== Math.floor((now - dt * 1000) / 100)) drawMinimap();
   if (weather.auto && Math.floor(now / 250) !== Math.floor((now - dt * 1000) / 250)) { $('hour').value = weather.hour; $('hourVal').textContent = weather.label; }
   pin.scale.setScalar(Math.max(1, camera.position.distanceTo(pin.position) / 2500));
 }

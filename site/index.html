@@ -72,6 +72,7 @@
   #spark { width: 100%; height: 70px; display: block; margin-top: 6px; }
   .note { color: var(--muted); font-size: 11px; line-height: 1.5; }
 
+  #minimap { right: 12px; bottom: calc(186px + env(safe-area-inset-bottom, 0px)); padding: 0; cursor: pointer; border-radius: 10px; }
   #credits { right: 12px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); padding: 5px 9px; font-size: 10.5px; color: var(--muted); border-radius: 8px; max-width: calc(100vw - 24px); box-sizing: border-box; }
   #credits a { color: inherit; }
   #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #dfe9e4; z-index: 5; font-size: 14px; color: var(--muted); transition: opacity 0.6s; }
@@ -87,6 +88,7 @@
   @media (max-width: 640px) {
     #yearLabel { font-size: 26px; } #play { width: 38px; height: 38px; }
     #credits { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+    #minimap { display: none; }
     #info { top: auto; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); max-height: 40vh; }
     .stat { gap: 10px; }
   }
@@ -138,6 +140,8 @@
     <span style="margin-left:auto; display:flex; gap:6px; align-items:center"><label class="fov" title="視角（FOV）：小＝望遠、扁平的迷你感；大＝廣角、景深強">視角 <input id="fov" type="range" min="15" max="75" step="1" value="34"> <output id="fovVal">34°</output></label><button id="tilt" type="button" title="移軸模糊（M）">迷你世界</button><button id="randomBtn" type="button" title="飛到另一個樹冠有變化的隨機地點">隨機地點</button><button id="aboutBtn" type="button">資料與限制</button></span>
   </div>
 </section>
+
+<canvas id="minimap" class="panel" hidden title="小地圖：點一下飛過去" aria-label="小地圖"></canvas>
 
 <div class="panel" id="credits">
   Landsat: USGS · ESA WorldCover 2021 (CC BY 4.0) · Copernicus DEM · 地址搜尋 ©
