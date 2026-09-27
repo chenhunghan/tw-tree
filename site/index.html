@@ -44,9 +44,12 @@
   .wx-label { cursor: help; }
   #searchStatus { margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 1em; }
   #searchStatus.warn { color: #8a5a12; }
-  .stat { display: flex; gap: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
-  .stat b { display: block; font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .stat { display: flex; gap: 12px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .stat b { display: block; font-size: 15.5px; color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
   .stat .down { color: var(--loss); } .stat .up { color: var(--forest); }
+  #trend { width: 100%; height: 46px; display: block; margin-top: 8px; }
+  .trend-legend { display: flex; gap: 12px; font-size: 11px; color: var(--muted); }
+  .trend-legend i { display: inline-block; width: 10px; height: 2px; vertical-align: 3px; margin-right: 4px; }
 
   #timeline { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 10px 16px 12px; }
   .tl-row { display: flex; align-items: center; gap: 14px; }
@@ -72,7 +75,7 @@
   #spark { width: 100%; height: 70px; display: block; margin-top: 6px; }
   .note { color: var(--muted); font-size: 11px; line-height: 1.5; }
 
-  #minimap { right: 12px; bottom: calc(186px + env(safe-area-inset-bottom, 0px)); padding: 0; cursor: pointer; border-radius: 10px; }
+  #minimap { left: 12px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); padding: 0; cursor: pointer; border-radius: 10px; }
   #credits { right: 12px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); padding: 5px 9px; font-size: 10.5px; color: var(--muted); border-radius: 8px; max-width: calc(100vw - 24px); box-sizing: border-box; }
   #credits a { color: inherit; }
   #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #dfe9e4; z-index: 5; font-size: 14px; color: var(--muted); transition: opacity 0.6s; }
@@ -115,6 +118,11 @@
     <div>樹冠面積<b id="statArea">—</b></div>
     <div>相較 <span id="statBaseYear">1984</span><b id="statDelta">—</b></div>
     <div>當年影像<b id="statScenes">—</b></div>
+    <div id="statBuiltBox" hidden>建成區<b id="statBuilt">—</b></div>
+  </div>
+  <div id="trendBox" hidden>
+    <svg id="trend" viewBox="0 0 300 46" preserveAspectRatio="none" role="img" aria-label="樹冠與建成區面積趨勢"></svg>
+    <div class="trend-legend"><span><i style="background:var(--forest)"></i>樹冠 <span id="trendTree"></span></span><span><i style="background:#8c8c86"></i>建成區 <span id="trendBuilt"></span></span></div>
   </div>
 </header>
 

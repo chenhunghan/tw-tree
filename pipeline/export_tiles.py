@@ -252,6 +252,7 @@ def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
         scenes[str(yr)] = [str(p) for p in d["pids"]]
     fl = filled(list(fcols.values()))
     px_ha = g.RES * g.RES / 1e4
+    built_year = np.where(st["built"].ravel() > 0, 1900 + st["built"].ravel().astype(int), 9999)
     for yr, fill in zip(years, fl):
         f = fcols[f"f{yr}"]
         valid = (f != g.NODATA_F) & use
@@ -259,6 +260,7 @@ def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
                       "valid_px": int(valid.sum()),
                       "tree_ha": float(f[valid].astype("float64").sum() / 100 * px_ha),
                       "filled_tree_ha": float(fill[use].astype("float64").sum() / 100 * px_ha),
+                      "built_ha": float(((built_year <= yr) & use).sum() * px_ha),
                       "scenes": len(scenes[str(yr)])})
     meta = {
         "format": "tpetree tile v2", "zone": zone, "crs": f"EPSG:{g.epsg(zone)}", "tile": [i, j],
@@ -426,6 +428,7 @@ def main():
         rows = [s for s in stats if s["year"] == yr]
         totals[str(yr)] = {"filled_tree_ha": round(sum(s["filled_tree_ha"] for s in rows), 1),
                            "observed_tree_ha": round(sum(s["tree_ha"] for s in rows), 1),
+                           "built_ha": round(sum(s.get("built_ha", 0) for s in rows), 1),
                            "valid_px": sum(s["valid_px"] for s in rows), "land_px": sum(s["land_px"] for s in rows)}
     lons = [c[0] for t in index_tiles for c in t["corners_lonlat"]]
     lats = [c[1] for t in index_tiles for c in t["corners_lonlat"]]

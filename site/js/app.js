@@ -309,7 +309,11 @@ let areaByYear = {};
 function computeStats(index) {
   const px_ha = (ds.res * ds.res) / 1e4;
   $('statBaseYear').textContent = years[0];
-  if (index.totals) { for (const y of years) areaByYear[y] = index.totals[y].filled_tree_ha; return; }
+  if (index.totals) {
+    for (const y of years) areaByYear[y] = index.totals[y].filled_tree_ha;
+    if (index.totals[years[0]].built_ha !== undefined) buildTrend(index);
+    return;
+  }
   for (const y of years) {
     let sum = 0;
     for (const t of ds.tiles.values()) { const a = t.filled[y]; for (let k = 0; k < a.length; k++) sum += a[k]; }
@@ -317,6 +321,22 @@ function computeStats(index) {
   }
   $('statBaseYear').textContent = years[0];
 }
+
+// Island totals: tree canopy (gap-filled) and built-up area (GISA first-built year) per year, each on its own scale.
+function buildTrend(index) {
+  const T = years.map(y => index.totals[y].filled_tree_ha), B = years.map(y => index.totals[y].built_ha);
+  const W = 300, H = 46, pad = 3, xp = (i) => pad + (W - 2 * pad) * i / (years.length - 1);
+  const line = (v, color) => {
+    const lo = Math.min(...v), hi = Math.max(...v), yp = (x) => H - pad - (H - 2 * pad) * (hi > lo ? (x - lo) / (hi - lo) : 0.5);
+    return `<polyline fill="none" stroke="${color}" stroke-width="1.8" vector-effect="non-scaling-stroke" points="${v.map((x, i) => `${xp(i).toFixed(1)},${yp(x).toFixed(1)}`).join(' ')}"/>`;
+  };
+  $('trend').innerHTML = line(B, '#8c8c86') + line(T, '#2b6a3a') + `<line id="trendNow" y1="0" y2="${H}" stroke="#d9480f" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
+  const k = (v) => `${Math.round(Math.min(...v) / 1000)}k–${Math.round(Math.max(...v) / 1000)}k 公頃`;
+  $('trendTree').textContent = k(T); $('trendBuilt').textContent = k(B);
+  $('trendBox').hidden = false; $('statBuiltBox').hidden = false;
+  trend = { xp, B };
+}
+let trend = null;
 
 function updateStats(year) {
   const a = areaByYear[year], a0 = areaByYear[years[0]];
@@ -326,6 +346,11 @@ function updateStats(year) {
   el.className = d < 0 ? 'down' : 'up';
   const nScenes = ds.index.scenes_per_year_region[year];
   $('statScenes').textContent = `${nScenes} 景${nScenes < LOW_SCENES ? '（低信心）' : ''}`;
+  if (trend) {
+    const i = years.indexOf(year), x = trend.xp(i);
+    $('trendNow').setAttribute('x1', x); $('trendNow').setAttribute('x2', x);
+    $('statBuilt').textContent = `${Math.round(trend.B[i]).toLocaleString()} 公頃`;
+  }
 }
 
 // ---------- timeline ----------
@@ -500,6 +525,7 @@ function renderInfo() {
       <dt>經緯度</dt><dd>${lat.toFixed(6)}, ${lon.toFixed(6)}</dd>
       <dt>像元中心</dt><dd>x ${x}, y ${y}<br><span class="note">EPSG:${32600 + tile.zone}（Landsat 原始格網）</span></dd>
       <dt>高度</dt><dd>${tile.z[k]} 公尺</dd>
+      ${tile.built ? `<dt>建成</dt><dd>${tile.built[k] ? (tile.built[k] === 72 ? '1972 年以前' : tile.built[k] === 78 ? '1978–1984 年' : `${1900 + tile.built[k]} 年`) + `（GISA）<br><span class="note">建成面積約 ${tile.bs[k]}%、建物高度約 ${tile.bh[k]} 公尺（GHSL 2018）</span>` : '2021 年前未建成（GISA）'}</dd>` : ''}
       <dt>來源影像</dt><dd>${src}</dd>
     </dl>
     ${sparkline(tile, k, year)}
