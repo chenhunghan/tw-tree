@@ -13,7 +13,10 @@ import { EXAG, DISPLAY_ZONE, prepareFilled, buildTerrain, setTerrainYears, makeT
 import { Forest, NEAR_DIST } from './trees.js';
 
 const params = new URLSearchParams(location.search);
-const DATA_BASE = params.get('data') || 'https://huggingface.co/datasets/chenhunghan/tw-tree/resolve/main/pilot/';
+const HF = 'https://huggingface.co/datasets/chenhunghan/tw-tree/resolve/main/';
+// Island data once enough of it is published (the export fills tiles north to south); the Taipei pilot until then.
+const DATA_BASES = params.get('data') ? [params.get('data')] : [HF + 'taiwan/', HF + 'pilot/'];
+const MIN_ISLAND_TILES = 150;
 const YEARS_PER_SEC = 0.8;
 const LOW_SCENES = 5;
 const $ = (id) => document.getElementById(id);
@@ -101,13 +104,24 @@ const forest = new Forest(scene, uniforms);
 const terrain = [];                      // meshes that can be picked (detailed + overview)
 const detail = new Map();                // tile key -> detailed mesh
 const coarse = new Map();                // tile key -> overview mesh
-const ds = new DataSet(DATA_BASE);
+let ds = new DataSet(DATA_BASES[0]);
 let frame, years = [], yearPos = 0, playing = false, pairKey = '', streaming = false;
 const EAGER_MAX = 40;                    // small datasets (the pilot) load every tile up front
 
 // ---------- load ----------
+async function openData() {
+  for (const [n, base] of DATA_BASES.entries()) {
+    ds = new DataSet(base);
+    try {
+      const index = await ds.init();
+      const last = n === DATA_BASES.length - 1;
+      if (last || index.complete !== false || index.tiles.length >= MIN_ISLAND_TILES) return index;
+    } catch (err) { if (n === DATA_BASES.length - 1) throw err; }
+  }
+}
+
 async function load() {
-  const index = await ds.init();
+  const index = await openData();
   years = ds.years;
   const [w, s, e, n] = index.bbox_lonlat;
   const [ox, oy] = lonLatToUtm((w + e) / 2, (s + n) / 2, DISPLAY_ZONE);

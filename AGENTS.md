@@ -192,6 +192,13 @@ The v2 pilot total rose from ~54 % (2013) to ~64 % (2021) and then stayed flat. 
   Matsu on path 118/042); zone 50 takes the remaining land (98 tiles: SW plain edge 72, Penghu 13, Kinmen 13).
 - **Ownership:** where a zone-50 tile overlaps a zone-51 tile, the frac tile's `own` column is 0 (zone 51 takes
   precedence). Stats count owned pixels only; the app discards non-owned pixels in the shader.
+- **Land:** frac tiles have `land` (1 = WorldCover 2021 permanent water < 50 %). The model gives open sea a nonzero,
+  sensor-dependent "tree fraction" (Matsu tiles showed a fake 2024 collapse), so stats, the overview and trees use land
+  pixels only; `f` is still stored for water. The app lets the sea plane show through sea-level water pixels.
+- **Format v2 tiles** (`tpetree tile v2`): frac `x_utm, y_utm, z_m, own, land, f<year>`; `overview.arrow.gz` (480 m blocks
+  of owned land pixels); index.json `totals` (gap-filled and observed land tree hectares per year), `complete`,
+  `tiles_planned`, `scenes_per_year_zone`. Gzip is written with mtime 0, so unchanged tiles are byte-identical and are not
+  re-uploaded.
 - **Raw-DN caching:** Earth Engine returns, per tile-year, the raw Collection 2 DN of the medoid observation (6 bands,
   uint16) + `s` + `n`, and per tile `static.npz` (z, WorldCover %, Hansen tree cover 2000, loss). Calibration, features and
   the model run locally (`classify()` in `export_tiles.py`). Verified on a pilot tile: scene index identical to the v2 export
@@ -201,6 +208,12 @@ The v2 pilot total rose from ~54 % (2013) to ~64 % (2021) and then stayed flat. 
   points, 3 km block hold-out). Island-wide held-out agreement with WorldCover 2021 is lower than the northern v2 figure:
   R² ≈ 0.45, MAE ≈ 21 points (the sample includes many mountain grassland/bamboo pixels; the v2 northern sample scored 0.57 on
   this sample design vs 0.71 on its own). The EE tree strings round-trip exactly (local parser vs sklearn: 3e-16).
+- **Verified v3 (2026-09-27, first 8 tiles, 60 pixels):** 60/60 integer positions, 60/60 clear; raw DN identical to
+  Planetary Computer in 59/59 same-processing cases (one L9 scene is a 2023 USGS reprocessing in EE vs the 2022 processing
+  on PC); tree fraction 59/60 exact, 1 off by 1. Two products are missing on PC and are skipped. `build/verify_taiwan.json`.
+- **Unattended run:** `pipeline/island_loop.sh` keeps the export running and assembles + publishes `taiwan/` to Hugging Face
+  every 3 h; it stops after the final publish. The app reads `taiwan/` once it has ≥ 150 tiles (or is complete) and falls
+  back to `pilot/` before that; `?data=` overrides.
 - **Earth Engine quota:** the Community tier (150 EECU-hours/month) was exhausted on 2026-09-27; the project runs in
   restricted mode (lower concurrency) until the 1st of each month. Measured throughput in restricted mode ~0.3 requests/s,
   ~30 h for 32,700 requests. The Contributor tier (1,000 EECU-hours/month) needs a billing account (no EE charges).

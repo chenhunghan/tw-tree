@@ -46,12 +46,13 @@ export class DataSet {
     const P = this.tilePx / B, n = P * P;
     const col = (name) => tbl.getChild(name).toArray();
     const zone = col('zone'), I = col('i'), J = col('j'), z = col('z_m'), own = col('own');
+    const land = tbl.getChild('land') ? col('land') : null;
     const f = Object.fromEntries(this.years.map(y => [y, col(`f${y}`)]));
     for (let s = 0; s < zone.length; s += n) {
       const t = { zone: zone[s], i: I[s], j: J[s], P, res: this.res * B, coarse: true };
       t.key = this.key(t);
       t.x0 = this.edge + t.i * this.tileM; t.y0 = this.edge + t.j * this.tileM;
-      t.z = z.subarray(s, s + n); t.own = own.subarray(s, s + n);
+      t.z = z.subarray(s, s + n); t.own = own.subarray(s, s + n); t.land = land ? land.subarray(s, s + n) : null;
       t.f = Object.fromEntries(this.years.map(y => [y, f[y].subarray(s, s + n)]));
       this.overview.set(t.key, t);
     }
@@ -69,6 +70,7 @@ export class DataSet {
       ...entry, key: k, meta, P: this.tilePx, res: this.res,
       x: tbl.getChild('x_utm').toArray(), y: tbl.getChild('y_utm').toArray(), z: tbl.getChild('z_m').toArray(), f,
       own: tbl.getChild('own')?.toArray() ?? null,        // null: every pixel is canonical (single-zone data)
+      land: tbl.getChild('land')?.toArray() ?? null,      // null: no water mask (pilot data; water = DEM <= 0)
     };
     this.tiles.set(k, tile);
     return tile;

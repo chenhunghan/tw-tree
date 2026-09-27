@@ -334,7 +334,7 @@ export class Forest {
       if (Math.hypot(cx - focus.x, cz - focus.z) > radius + ds.tileM) return;
       for (let row = 0; row < P; row++) for (let col = 0; col < P; col++) {
         const k = row * P + col;
-        if (tile.own && !tile.own[k]) continue;                   // drawn by the zone-51 tile instead
+        if ((tile.own && !tile.own[k]) || (tile.land && !tile.land[k])) continue;   // other zone's pixel, or water
         const [wx, , wz] = toWorld(frame, tile.zone, tile.x[k], tile.y[k], 0);
         const dx = wx - focus.x, dz = wz - focus.z;
         if (dx * dx + dz * dz > r2) continue;

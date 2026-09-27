@@ -40,10 +40,10 @@ export function toWorld(frame, zone, x, y, z) {
 export function worldToDisplayUtm(frame, wx, wz) { return [wx + frame.ox, frame.oy - wz]; }
 
 const vertexDecl = /* glsl */`
-attribute float aFa; attribute float aFb; attribute float aNa; attribute float aNb; attribute float aOwn;
-uniform float uT; varying float vF; varying float vNd; varying float vOwn; varying vec3 vWorld;`;
+attribute float aFa; attribute float aFb; attribute float aNa; attribute float aNb; attribute float aOwn; attribute float aLand;
+uniform float uT; varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying vec3 vWorld;`;
 const fragDecl = /* glsl */`
-varying float vF; varying float vNd; varying float vOwn; varying vec3 vWorld;
+varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying vec3 vWorld;
 float th12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 float tvn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(th12(i), th12(i + vec2(1, 0)), f.x), mix(th12(i + vec2(0, 1)), th12(i + vec2(1, 1)), f.x), f.y); }
@@ -61,18 +61,19 @@ export function makeTerrainMaterial(uniforms) {
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vF = mix(aFa, aFb, uT) / 100.0;
         vNd = mix(aNa, aNb, uT);
-        vOwn = aOwn;
+        vOwn = aOwn; vLand = aLand;
         vWorld = (modelMatrix * vec4(position, 1.0)).xyz;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${fragDecl}`)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `
         if (vOwn < 0.5) discard;                                    // another tile (zone 51) owns this location
+        if (vLand < 0.5 && vWorld.y < 0.75) discard;                // open sea: let the sea plane show, no tile seams
         vec3 c = treeRamp(clamp(vF, 0.0, 1.0));
         c *= 0.9 + 0.12 * tvn(vWorld.xz / 14.0) + 0.06 * tvn(vWorld.xz / 3.0);
         float stripe = step(0.5, fract((vWorld.x + vWorld.z) / 60.0));
         vec3 grey = vec3(dot(c, vec3(0.3, 0.59, 0.11)));
         c = mix(c, mix(grey, grey * 0.8, stripe), 0.75 * vNd);
-        c = mix(c, vec3(0.55, 0.71, 0.79), step(vWorld.y, 0.75));   // DEM <= 0 m: water
+        c = mix(c, vec3(0.55, 0.71, 0.79), max(step(vWorld.y, 0.75), step(vLand, 0.5)));   // DEM <= 0 m or WorldCover water
         vec4 diffuseColor = vec4(c, opacity);`);
   };
   return m;
@@ -87,7 +88,7 @@ export function buildTerrain(tile, lookup, frame, material) {
   const se = lookup(tile.zone, tile.i + 1, tile.j - 1);
   const srcK = new Uint32Array(N * N), srcRef = new Uint8Array(N * N);
   const refs = [tile, east, south, se];
-  const pos = new Float32Array(N * N * 3), own = new Float32Array(N * N);
+  const pos = new Float32Array(N * N * 3), own = new Float32Array(N * N), land = new Float32Array(N * N);
   for (let r = 0; r < N; r++) for (let c = 0; c < N; c++) {
     const v = r * N + c;
     let ref = 0, rr = r, cc = c;
@@ -97,6 +98,7 @@ export function buildTerrain(tile, lookup, frame, material) {
     const t = refs[ref], k = rr * P + cc;
     srcRef[v] = ref; srcK[v] = k;
     own[v] = t.own ? t.own[k] : 1;
+    land[v] = t.land ? t.land[k] : 1;
     const x = tile.x0 + res * c + res / 2, y = tile.y0 + tileM - res * r - res / 2;
     const [wx, wy, wz] = toWorld(frame, tile.zone, x, y, t.z[k]);
     pos[v * 3] = wx; pos[v * 3 + 1] = wy; pos[v * 3 + 2] = wz;
@@ -113,6 +115,7 @@ export function buildTerrain(tile, lookup, frame, material) {
   geo.computeVertexNormals();
   for (const name of ['aFa', 'aFb', 'aNa', 'aNb']) geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(N * N), 1));
   geo.setAttribute('aOwn', new THREE.BufferAttribute(own, 1));
+  geo.setAttribute('aLand', new THREE.BufferAttribute(land, 1));
   geo.computeBoundingSphere();
   const mesh = new THREE.Mesh(geo, material);
   mesh.userData = { tile, refs, srcRef, srcK };

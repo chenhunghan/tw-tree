@@ -59,8 +59,11 @@ def year_image(zone, i, j, year, sensors=None):
 def static_image(zone):
     proj = ee.Projection(f"EPSG:{g.epsg(zone)}", [g.RES, 0, g.EDGE, 0, -g.RES, g.EDGE])
     han = ee.Image("UMD/hansen/global_forest_change_2025_v1_13")
+    wc = ee.ImageCollection("ESA/WorldCover/v200").first().select("Map")
     return ee.Image.cat([
         g.elevation(),
+        wc.eq(80).toFloat().reduceResolution(ee.Reducer.mean(), maxPixels=1024).reproject(proj)
+          .multiply(100).round().unmask(100).toUint8().rename("water"),
         g.worldcover_tree_fraction(zone).multiply(100).round().unmask(255).toUint8().rename("wc"),
         han.select("treecover2000").reproject(proj).unmask(255).toUint8().rename("tc2000"),
         han.select("lossyear").unmask(0).gt(0).reduceResolution(ee.Reducer.max(), maxPixels=64).reproject(proj)
@@ -96,12 +99,15 @@ def fetch_year(cache, zone, i, j, year, sensors=None):
     return year, f"{len(pid_list)} scenes"
 
 
+STATIC = ("z", "water", "wc", "tc2000", "loss")
+
+
 def fetch_static(cache, zone, i, j):
     out = cache / "static.npz"
-    if not out.exists():
+    if not out.exists() or set(STATIC) - set(np.load(out).files):
         arr = call(lambda: ee.data.computePixels({"expression": static_image(zone), "fileFormat": "NUMPY_NDARRAY",
                                                   "grid": g.tile_grid(zone, i, j)}))
-        np.savez_compressed(out, **{k: arr[k] for k in ("z", "wc", "tc2000", "loss")})
+        np.savez_compressed(out, **{k: arr[k] for k in STATIC})
     return "static"
 
 
@@ -126,7 +132,7 @@ def write_arrow(path, table):
     buf = io.BytesIO()
     with ipc.new_file(buf, table.schema) as w:
         w.write_table(table)
-    path.write_bytes(gzip.compress(buf.getvalue(), 9))
+    path.write_bytes(gzip.compress(buf.getvalue(), 9, mtime=0))   # deterministic bytes: unchanged tiles are not re-uploaded
 
 
 def own_mask(zone, i, j, zone51_tiles):
@@ -152,11 +158,13 @@ def filled(fcols):
     return [np.where(a == g.NODATA_F, 0, a) for a in out]
 
 
-def overview(zone, i, j, z, own, fcols, years):
-    """480 m block means over owned pixels: valid-only mean per year (255 if none observed), mean elevation."""
+def overview(zone, i, j, z, own, land, fcols, years):
+    """480 m block means: tree % over owned land pixels (255 if none observed), mean elevation over owned pixels,
+    own = at least half the block owned, land = at least half of the owned pixels are land."""
     B = g.TILE // OV
     blk = lambda a: a.reshape(B, OV, B, OV).swapaxes(1, 2).reshape(B * B, OV * OV)
     o = blk(own.reshape(g.TILE, g.TILE)).astype(bool)
+    ol = o & blk(land.reshape(g.TILE, g.TILE)).astype(bool)
     zz = blk(z.reshape(g.TILE, g.TILE)).astype(float)
     n_own = o.sum(1)
     zmean = np.where(n_own > 0, (zz * o).sum(1) / np.maximum(n_own, 1), 0).round().astype("int16")
@@ -166,10 +174,10 @@ def overview(zone, i, j, z, own, fcols, years):
     X, Y = np.meshgrid(cx, cy)
     cols = {"zone": np.full(B * B, zone, "u1"), "i": np.full(B * B, i, "i2"), "j": np.full(B * B, j, "i2"),
             "x_utm": X.ravel().astype("i4"), "y_utm": Y.ravel().astype("i4"), "z_m": zmean,
-            "own": (n_own * 2 >= OV * OV).astype("u1")}
+            "own": (n_own * 2 >= OV * OV).astype("u1"), "land": (ol.sum(1) * 2 >= np.maximum(n_own, 1)).astype("u1")}
     for yr, f in zip(years, fcols):
         fb = blk(f.reshape(g.TILE, g.TILE)).astype(float)
-        v = o & (fb != g.NODATA_F)
+        v = ol & (fb != g.NODATA_F)
         nv = v.sum(1)
         cols[f"f{yr}"] = np.where(nv > 0, (fb * v).sum(1) / np.maximum(nv, 1), g.NODATA_F).round().astype("u1")
     return cols
@@ -177,8 +185,11 @@ def overview(zone, i, j, z, own, fcols, years):
 
 def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
     x, y = g.pixel_centres(zone, i, j)
-    z = np.load(cache / "static.npz")["z"].ravel().astype("int16")
+    st = np.load(cache / "static.npz")
+    z = st["z"].ravel().astype("int16")
+    land = (st["water"].ravel() < 50).astype("u1")          # WorldCover 2021 permanent water < 50 % of the pixel
     own = own_mask(zone, i, j, zone51_tiles)
+    use = (own == 1) & (land == 1)
     fcols, scols, ncols, scenes, stats = {}, {}, {}, {}, []
     for yr in years:
         d = np.load(cache / f"{yr}.npz")
@@ -190,10 +201,11 @@ def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
     px_ha = g.RES * g.RES / 1e4
     for yr, fill in zip(years, fl):
         f = fcols[f"f{yr}"]
-        valid = (f != g.NODATA_F) & (own == 1)
-        stats.append({"zone": zone, "i": i, "j": j, "year": yr, "own_px": int(own.sum()), "valid_px": int(valid.sum()),
+        valid = (f != g.NODATA_F) & use
+        stats.append({"zone": zone, "i": i, "j": j, "year": yr, "own_px": int(own.sum()), "land_px": int(use.sum()),
+                      "valid_px": int(valid.sum()),
                       "tree_ha": float(f[valid].astype("float64").sum() / 100 * px_ha),
-                      "filled_tree_ha": float(fill[own == 1].astype("float64").sum() / 100 * px_ha),
+                      "filled_tree_ha": float(fill[use].astype("float64").sum() / 100 * px_ha),
                       "scenes": len(scenes[str(yr)])})
     meta = {
         "format": "tpetree tile v2", "zone": zone, "crs": f"EPSG:{g.epsg(zone)}", "tile": [i, j],
@@ -203,10 +215,11 @@ def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
         "calibration": {k: g.calibration(k) for k in g.COLLECTIONS},
         "f": "tree fraction percent 0-100: model applied to the calibrated raw DN of the medoid observation; 255 = no data",
         "own": "1 = canonical pixel for this location; 0 = a zone-51 tile also covers it (use that one)",
+        "land": "1 = land (ESA WorldCover 2021 permanent water < 50 % of the pixel); stats and the app use land pixels only",
         "z_m": "Copernicus DEM GLO-30 (2024_1), bilinear to pixel centre, display only",
         "generated": datetime.date.today().isoformat(), "attribution": ATTRIBUTION,
     }
-    frac = pa.table({"x_utm": x, "y_utm": y, "z_m": z, "own": own, **fcols},
+    frac = pa.table({"x_utm": x, "y_utm": y, "z_m": z, "own": own, "land": land, **fcols},
                     metadata={"tpetree": json.dumps(meta, ensure_ascii=False)})
     prov_meta = dict(meta, s="index into scenes[year] (Landsat product IDs); 65535 = none",
                      n="distinct clear acquisition dates in the year",
@@ -216,11 +229,25 @@ def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
     outdir.mkdir(parents=True, exist_ok=True)
     write_arrow(outdir / f"{i}_{j}.frac.arrow.gz", frac)
     write_arrow(outdir / f"{i}_{j}.prov.arrow.gz", prov)
-    return stats, overview(zone, i, j, z, own, list(fcols.values()), years)
+    return stats, overview(zone, i, j, z, own, land, list(fcols.values()), years)
+
+
+_RF = None
+
+
+def _init_worker(name):
+    global _RF
+    _RF = joblib.load(ROOT / "build" / "models" / f"{name}.joblib")
+
+
+def _assemble_job(job):
+    cache, outdir, z, i, j, years, model_name, zone51_tiles = job
+    return (z, i, j), assemble(cache, outdir, z, i, j, years, {"name": model_name}, _RF, zone51_tiles)
 
 
 def tile_complete(cache, years):
-    return (cache / "static.npz").exists() and all((cache / f"{yr}.npz").exists() for yr in years)
+    st = cache / "static.npz"
+    return st.exists() and not set(STATIC) - set(np.load(st).files) and all((cache / f"{yr}.npz").exists() for yr in years)
 
 
 def main():
@@ -230,13 +257,14 @@ def main():
     ap.add_argument("--bbox", type=float, nargs=4, metavar=("W", "S", "E", "N"))
     ap.add_argument("--zone", type=int)
     ap.add_argument("--years", type=int, nargs=2, default=[1984, 2026])
-    ap.add_argument("--model", default="rf_tw_multiyear")
+    ap.add_argument("--model", default="rf_tw_2021")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--tiles", nargs="*", help="limit to zone_i_j (or i_j) tile ids")
     ap.add_argument("--sensors", nargs="*", help="restrict composites to these sensors (diagnostics), e.g. LC08")
     ap.add_argument("--outroot", default=str(ROOT / "site" / "data"), help="parent folder of the <name> output")
     ap.add_argument("--assemble-only", action="store_true", help="skip Earth Engine; write the tiles already complete")
     ap.add_argument("--max-consecutive-failures", type=int, default=25)
+    ap.add_argument("--assemble-workers", type=int, default=6, help="local processes for classification/assembly")
     a = ap.parse_args()
 
     g.init()
@@ -317,9 +345,12 @@ def main():
     ready = [t for t in tiles if tile_complete(cache_of(*t), years)]
     if not ready:
         print("no complete tiles yet"); return
-    model, rf = load_model(a.model)
+    model, _ = load_model(a.model)          # checks the joblib forest against the published tree strings
+    jobs = [(cache_of(z, i, j), outroot / str(z), z, i, j, years, a.model, zone51_tiles) for (z, i, j) in ready]
+    with cf.ProcessPoolExecutor(a.assemble_workers, initializer=_init_worker, initargs=(a.model,)) as ex:
+        done = {key: res for key, res in ex.map(_assemble_job, jobs, chunksize=4)}
     for (z, i, j) in ready:
-        s, o = assemble(cache_of(z, i, j), outroot / str(z), z, i, j, years, model, rf, zone51_tiles)
+        s, o = done[(z, i, j)]
         stats += s; ov.append(o)
         x0, y0 = g.EDGE + i * g.TILE_M, g.EDGE + j * g.TILE_M
         corners = [to_ll[z].transform(x, y) for x, y in ((x0, y0), (x0 + g.TILE_M, y0), (x0 + g.TILE_M, y0 + g.TILE_M), (x0, y0 + g.TILE_M))]
@@ -329,15 +360,16 @@ def main():
     pq.write_table(pa.Table.from_pylist(stats), outroot / "summary.parquet")
     ovt = pa.table({k: np.concatenate([o[k] for o in ov]) for k in ov[0]},
                    metadata={"tpetree": json.dumps({"format": "tpetree overview v1", "block_px": OV, "block_m": OV * g.RES,
-                                                    "years": years, "f": "mean tree % of owned, observed pixels; 255 = none",
-                                                    "own": "1 if at least half the block's pixels are owned"})})
+                                                    "years": years, "f": "mean tree % of owned, observed land pixels; 255 = none",
+                                                    "own": "1 if at least half the block's pixels are owned",
+                                                    "land": "1 if at least half the owned pixels are land"})})
     write_arrow(outroot / "overview.arrow.gz", ovt)
     totals = {}
     for yr in years:
         rows = [s for s in stats if s["year"] == yr]
         totals[str(yr)] = {"filled_tree_ha": round(sum(s["filled_tree_ha"] for s in rows), 1),
                            "observed_tree_ha": round(sum(s["tree_ha"] for s in rows), 1),
-                           "valid_px": sum(s["valid_px"] for s in rows), "own_px": sum(s["own_px"] for s in rows)}
+                           "valid_px": sum(s["valid_px"] for s in rows), "land_px": sum(s["land_px"] for s in rows)}
     lons = [c[0] for t in index_tiles for c in t["corners_lonlat"]]
     lats = [c[1] for t in index_tiles for c in t["corners_lonlat"]]
     (outroot / "index.json").write_text(json.dumps({
