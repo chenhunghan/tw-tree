@@ -2,7 +2,9 @@
 
 A 3D map of tree cover across Taiwan from 1984 to 2026. Each 30 m Landsat pixel's tree fraction is drawn as
 procedural three.js trees on custom terrain. A timeline autoplays and can be scrubbed; search by coordinates,
-device location or a Traditional Chinese address.
+device location or a Traditional Chinese address. Illustrative buildings rise in the year their pixel first became
+built-up (GISA), so tree-cover change can be read against urban growth; a header chart plots both island totals.
+Weather, clouds and day/night are decorative.
 
 - **Site:** <https://chenhunghan.github.io/tw-tree/> (`site/`: plain HTML + ES modules, three.js from a CDN, no build step).
 - **Data:** the Hugging Face dataset [chenhunghan/tw-tree](https://huggingface.co/datasets/chenhunghan/tw-tree)
@@ -29,6 +31,7 @@ declaration (free reuse with attribution).
 
 Landsat Collection 2 Level-2 courtesy of the U.S. Geological Survey · ESA WorldCover 2021 v200 (CC BY 4.0) ·
 Copernicus DEM GLO-30 © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS
-by the European Union and ESA · Address search: Nominatim / © OpenStreetMap contributors (ODbL) ·
+by the European Union and ESA · GISA 1972–2021 (Ren et al. 2025, CC BY 4.0) · JRC GHSL P2023A (GHS-BUILT-H/S 2018) ·
+Hansen/UMD Global Forest Change v1.13 (CC BY 4.0) · Address search: Nominatim / © OpenStreetMap contributors (ODbL) ·
 `data/taipei_parks_halfyear_ods/`: 資料來源：臺北市政府工務局公園路燈工程管理處「臺北市行道樹及其他植栽」半年報
 (Taipei City open-data declaration).
