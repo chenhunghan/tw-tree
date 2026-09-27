@@ -3,7 +3,8 @@
 // Species follow Taiwan's elevation zones (Su 1984) plus urban planting; two levels of detail keep triangle counts low.
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { EXAG, toWorld } from './terrain.js';
+import { EXAG, toWorld, shareUniforms } from './terrain.js';
+import { CLOUD_GLSL } from './weather.js';
 
 const SLOTS = 4;
 export const NEAR_DIST = 850;          // metres from the camera: detailed geometry inside, simple outside
@@ -231,14 +232,15 @@ function pick(weights, u) {
 const GEOM_DECL = /* glsl */`
 attribute float aPart; attribute vec3 aCol; attribute vec3 aTint; attribute float aThr;
 attribute float aFa; attribute float aFb; attribute float aNd;
-uniform float uT; uniform float uTime;`;
+uniform float uT; uniform float uTime; uniform float uWindS;`;
 const GEOM_BODY = /* glsl */`
   float fT = mix(aFa, aFb, uT) / 100.0;
   float sT = smoothstep(aThr - 0.07, aThr + 0.07, fT);
   transformed *= max(sT, 0.0);
   vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
   float hh = max(position.y, 0.0);
-  float sway = sin(uTime * 1.3 + ip.x * 0.043 + ip.z * 0.061) * 0.0006 * hh * hh * step(0.5, aPart);
+  float gust = 0.75 + 0.25 * sin(uTime * 0.37 + ip.x * 0.004);
+  float sway = sin(uTime * (1.0 + 0.9 * uWindS) + ip.x * 0.043 + ip.z * 0.061) * 0.0006 * (0.3 + 1.4 * uWindS) * gust * hh * hh * step(0.5, aPart);
   transformed.x += sway; transformed.z += sway * 0.7;`;
 const NOISE = /* glsl */`
 float h13(vec3 p) { p = fract(p * 0.1031); p += dot(p, p.zyx + 31.32); return fract((p.x + p.y) * p.z); }
@@ -252,6 +254,7 @@ function makeMaterial(uniforms, doubleSide) {
   const m = new THREE.MeshLambertMaterial({ color: 0xffffff, side: doubleSide ? THREE.DoubleSide : THREE.FrontSide });
   m.onBeforeCompile = (sh) => {
     Object.assign(sh.uniforms, { uT: uniforms.uT, uTime: uniforms.uTime, uSunView: uniforms.uSunView });
+    shareUniforms(sh, uniforms, ['uWindS', 'uCloud', 'uCloudOff', 'uSunDir', 'uCloudH', 'uDay']);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>\n${GEOM_DECL}\nvarying vec3 vTreeCol; varying vec3 vLeafPos; varying float vPart;`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${GEOM_BODY}
@@ -262,10 +265,10 @@ function makeMaterial(uniforms, doubleSide) {
         vTreeCol = base; vPart = aPart;
         vLeafPos = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz;`);
     sh.fragmentShader = sh.fragmentShader
-      .replace('#include <common>', `#include <common>\nvarying vec3 vTreeCol; varying vec3 vLeafPos; varying float vPart; uniform vec3 uSunView;\n${NOISE}`)
+      .replace('#include <common>', `#include <common>\nvarying vec3 vTreeCol; varying vec3 vLeafPos; varying float vPart; uniform vec3 uSunView;\n${NOISE}\n${CLOUD_GLSL}`)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `
         float dap = vn3(vLeafPos * 0.85) * 0.6 + vn3(vLeafPos * 2.6) * 0.4;
-        vec3 tc = vTreeCol * mix(0.95 + 0.1 * dap, 0.7 + 0.55 * dap, step(0.5, vPart));
+        vec3 tc = vTreeCol * mix(0.95 + 0.1 * dap, 0.7 + 0.55 * dap, step(0.5, vPart)) * cloudShadow(vLeafPos);
         vec4 diffuseColor = vec4(tc, opacity);`)
       .replace('#include <opaque_fragment>', `
         // light through leaves when looking toward the sun
@@ -279,7 +282,7 @@ function makeMaterial(uniforms, doubleSide) {
 function makeDepthMaterial(uniforms) {
   const m = new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking });
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, { uT: uniforms.uT, uTime: uniforms.uTime });
+    Object.assign(sh.uniforms, { uT: uniforms.uT, uTime: uniforms.uTime, uWindS: uniforms.uWindS });
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>\n${GEOM_DECL}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>\n${GEOM_BODY}`);
@@ -335,6 +338,7 @@ export class Forest {
       for (let row = 0; row < P; row++) for (let col = 0; col < P; col++) {
         const k = row * P + col;
         if ((tile.own && !tile.own[k]) || (tile.land && !tile.land[k])) continue;   // other zone's pixel, or water
+        if (!tile.land && tile.z[k] * EXAG < 1.2) continue;                    // no water mask: DEM ~0 m is drawn as water
         const [wx, , wz] = toWorld(frame, tile.zone, tile.x[k], tile.y[k], 0);
         const dx = wx - focus.x, dz = wz - focus.z;
         if (dx * dx + dz * dz > r2) continue;

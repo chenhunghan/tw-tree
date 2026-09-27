@@ -38,6 +38,10 @@
   .fov input { width: 90px; accent-color: var(--accent); }
   .fov output { width: 2.6em; font-variant-numeric: tabular-nums; }
   button.on { background: #e6efe2; border-color: var(--accent); color: var(--accent); }
+  .wx { display: flex; align-items: center; gap: 5px; margin-top: 8px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .wx button { padding: 4px 9px; font-size: 12px; }
+  .wx .fov input { width: 110px; }
+  .wx-label { cursor: help; }
   #searchStatus { margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 1em; }
   #searchStatus.warn { color: #8a5a12; }
   .stat { display: flex; gap: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
@@ -99,6 +103,12 @@
     <button type="button" id="gps" title="使用裝置定位">我的位置</button>
   </form>
   <div id="searchStatus"></div>
+  <div class="wx" aria-label="天氣（裝飾用）">
+    <span class="wx-label" title="天氣與時間只是畫面效果，不是實際資料">天氣</span>
+    <button type="button" data-wx="clear">晴</button><button type="button" data-wx="cloudy">多雲</button><button type="button" data-wx="rain">雨</button>
+    <label class="fov" title="一天中的時間">時間 <input id="hour" type="range" min="0" max="23.99" step="0.05" value="7.5"> <output id="hourVal">07:30</output></label>
+    <button type="button" id="autoTime" title="時間自動流動（一天約 4 分鐘）">自動</button>
+  </div>
   <div class="stat">
     <div>樹冠面積<b id="statArea">—</b></div>
     <div>相較 <span id="statBaseYear">1984</span><b id="statDelta">—</b></div>
@@ -125,7 +135,7 @@
     <span>樹冠比例</span><span>0%</span><span class="ramp"></span><span>100%</span>
     <span><i class="sw" style="background:#9a9a9a"></i>當年無清晰觀測（沿用前一次）</span>
     <span><i class="sw" style="background:var(--loss)"></i>樹冠減少中</span>
-    <span style="margin-left:auto; display:flex; gap:6px; align-items:center"><label class="fov" title="視角（FOV）：小＝望遠、扁平的迷你感；大＝廣角、景深強">視角 <input id="fov" type="range" min="15" max="75" step="1" value="34"> <output id="fovVal">34°</output></label><button id="tilt" type="button" title="移軸模糊（M）">迷你世界</button><button id="aboutBtn" type="button">資料與限制</button></span>
+    <span style="margin-left:auto; display:flex; gap:6px; align-items:center"><label class="fov" title="視角（FOV）：小＝望遠、扁平的迷你感；大＝廣角、景深強">視角 <input id="fov" type="range" min="15" max="75" step="1" value="34"> <output id="fovVal">34°</output></label><button id="tilt" type="button" title="移軸模糊（M）">迷你世界</button><button id="randomBtn" type="button" title="飛到另一個樹冠有變化的隨機地點">隨機地點</button><button id="aboutBtn" type="button">資料與限制</button></span>
   </div>
 </section>
 
@@ -157,6 +167,7 @@
       <li>30 公尺像元約 0.09 公頃，多數行道樹小於一個像元；樹冠比例反映的是像元內的樹冠占比。</li>
       <li>某年沒有清晰觀測的像元，畫面沿用前一次觀測並以灰色條紋標示，不會被當成樹冠變化。</li>
       <li>地形高度來自 Copernicus DEM GLO-30，僅供顯示，並放大 1.5 倍。</li>
+      <li>天氣、雲、風、雨與日夜只是畫面效果，不是實際氣象資料；雲影也不影響樹冠數值。</li>
       <li>地址搜尋使用 OpenStreetMap 的 Nominatim；臺灣門牌資料不完整，找不到時會逐步退到巷弄、路段或行政區，並顯示達到的精度。</li>
     </ul>
     <h3>來源</h3>

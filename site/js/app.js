@@ -9,7 +9,8 @@ import { HorizontalTiltShiftShader } from 'three/addons/shaders/HorizontalTiltSh
 import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftShader.js';
 import { DataSet, NODATA_F, NODATA_S } from './data.js';
 import { lonLatToUtm, utmToLonLat, parseCoords, geocode } from './geo.js';
-import { EXAG, DISPLAY_ZONE, prepareFilled, buildTerrain, setTerrainYears, makeTerrainMaterial, toWorld, worldToDisplayUtm } from './terrain.js';
+import { EXAG, DISPLAY_ZONE, prepareFilled, buildTerrain, setTerrainYears, makeTerrainMaterial, makeWaterMaterial, toWorld, worldToDisplayUtm } from './terrain.js';
+import { Weather, PRESETS } from './weather.js';
 import { Forest, NEAR_DIST } from './trees.js';
 
 const params = new URLSearchParams(location.search);
@@ -22,7 +23,8 @@ const LOW_SCENES = 5;
 const $ = (id) => document.getElementById(id);
 
 // ---------- scene ----------
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false });
+// Logarithmic depth: the view spans 5 m to 900 km, and water 4 m above the sea plane must not z-fight (flicker).
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false, logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -31,8 +33,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;
 $('scene').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
-const HAZE = new THREE.Color(0xd6e3e6), ZENITH = new THREE.Color(0x6f9fc6);
-scene.fog = new THREE.FogExp2(HAZE, 0.000032);
+scene.fog = new THREE.FogExp2(new THREE.Color(0xd6e3e6), 0.000032);
 const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 5, 900000);
 const controls = new MapControls(camera, renderer.domElement);
 controls.enableDamping = true;
@@ -41,31 +42,20 @@ controls.minDistance = 120;
 controls.maxDistance = 420000;          // whole island
 controls.zoomToCursor = true;
 
-// Light: morning sun from the south-east (Taiwan sits at ~24°N), soft sky fill, shadows around the focus point.
-const SUN_DIR = new THREE.Vector3(0.52, 0.62, 0.58).normalize();
-scene.add(new THREE.HemisphereLight(0xd4e6f5, 0x4d5a3c, 1.05));
+// Light: the weather module moves the sun (or moon) through the day and sets sky, fog and light colours.
+const hemi = new THREE.HemisphereLight(0xd4e6f5, 0x4d5a3c, 1.05);
+scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff0d8, 2.6);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
 sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.8;
 scene.add(sun, sun.target);
-const sky = new THREE.Mesh(new THREE.SphereGeometry(800000, 32, 16), new THREE.ShaderMaterial({
-  side: THREE.BackSide, depthWrite: false, fog: false,
-  uniforms: { uHaze: { value: HAZE }, uZenith: { value: ZENITH }, uSun: { value: SUN_DIR } },
-  vertexShader: 'varying vec3 vDir; void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
-  fragmentShader: `varying vec3 vDir; uniform vec3 uHaze, uZenith, uSun;
-    void main(){ float h = max(vDir.y, 0.0); vec3 c = mix(uHaze, uZenith, pow(h, 0.55));
-      float s = max(dot(vDir, uSun), 0.0); c += vec3(1.0, 0.9, 0.7) * (pow(s, 90.0) * 0.9 + pow(s, 8.0) * 0.12);
-      gl_FragColor = vec4(c, 1.0); }`,
-}));
-sky.renderOrder = -1;
-scene.add(sky);
-const sea = new THREE.Mesh(new THREE.PlaneGeometry(4000000, 4000000), new THREE.MeshLambertMaterial({ color: 0x8fb6c8 }));
-sea.rotation.x = -Math.PI / 2; sea.position.y = -4;
+const weather = new Weather(scene);
+const uniforms = { uT: { value: 0 }, uTime: { value: 0 }, uSunView: { value: new THREE.Vector3() }, ...weather.uniforms };
+const sea = new THREE.Mesh(new THREE.PlaneGeometry(4000000, 4000000), makeWaterMaterial(uniforms));
+sea.rotation.x = -Math.PI / 2; sea.position.y = -4; sea.receiveShadow = true;
 scene.add(sea);
-
-const uniforms = { uT: { value: 0 }, uTime: { value: 0 }, uSunView: { value: new THREE.Vector3() } };
 
 // Post-processing (as in lns-lab): MSAA half-float target, faint bloom, tilt-shift "miniature" blur, grade, output.
 const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
@@ -158,18 +148,48 @@ async function load() {
   }
   computeStats(index);
   buildTimeline(index);
-  // start: oblique overview of the data, then autoplay
-  const span = Math.max(...index.tiles.map(t => Math.hypot(...toWorld(frame, t.zone, t.x0, t.y0, 0).filter((_, k) => k !== 1))));
-  const c = new THREE.Vector3(0, 0, 0);
-  controls.target.copy(c);
-  const d = streaming ? span * 1.9 : 20000;
-  camera.position.set(c.x - d * 0.17, d * 0.62, c.z + d * 0.76);
-  controls.autoRotate = true; controls.autoRotateSpeed = 0.25;
+  // start close enough to see trees, at a random place where tree cover changed; then autoplay
+  const start = pickStart();
+  if (start) viewAt(start);
+  else {
+    const span = Math.max(...index.tiles.map(t => Math.hypot(...toWorld(frame, t.zone, t.x0, t.y0, 0).filter((_, k) => k !== 1))));
+    const d = streaming ? span * 1.9 : 20000;
+    controls.target.set(0, 0, 0); camera.position.set(-d * 0.17, d * 0.62, d * 0.76);
+  }
+  controls.autoRotate = true; controls.autoRotateSpeed = 0.35;
   $('loading').style.opacity = 0;
   setTimeout(() => $('loading').remove(), 700);
   setYearPos(0);
   playing = true; updatePlayButton();
 }
+
+// A random land pixel with mid-range tree cover that changed over the timeline (full tiles, or the overview when
+// streaming). Returns its native position, or null.
+function pickStart() {
+  const pool = streaming ? [...ds.overview.values()] : [...ds.tiles.values()];
+  if (!pool.length) return null;
+  const first = years[0], last = years[years.length - 1];
+  let best = null, bestScore = -Infinity;
+  for (let n = 0; n < 5000; n++) {
+    const t = pool[Math.floor(Math.random() * pool.length)], k = Math.floor(Math.random() * t.z.length);
+    if ((t.own && !t.own[k]) || (t.land && !t.land[k]) || t.z[k] <= 3) continue;
+    const a = t.filled[first][k], b = t.filled[last][k], mean = (a + b) / 2;
+    if (mean < 25 || mean > 90) continue;
+    const score = Math.abs(a - b) + Math.random() * 12 - (t.z[k] > 900 ? 25 : 0);
+    if (score > bestScore) { bestScore = score; best = [t, k]; }
+    if (n > 800 && best) break;
+  }
+  if (!best) return null;
+  const [t, k] = best, row = Math.floor(k / t.P), col = k % t.P;
+  return { zone: t.zone, x: t.x0 + t.res * col + t.res / 2, y: t.y0 + t.P * t.res - t.res * row - t.res / 2, z: t.z[k] };
+}
+function startPose(p, dist = 1700, elevDeg = 33, azDeg = Math.random() * 360) {
+  const [wx, wy, wz] = toWorld(frame, p.zone, p.x, p.y, p.z);
+  const e = THREE.MathUtils.degToRad(elevDeg), a = THREE.MathUtils.degToRad(azDeg);
+  const target = new THREE.Vector3(wx, wy, wz);
+  return { target, cam: target.clone().add(new THREE.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e)).multiplyScalar(dist)) };
+}
+function viewAt(p) { const { target, cam } = startPose(p); controls.target.copy(target); camera.position.copy(cam); lastFocus = null; }
 
 const lookupDetail = (z, i, j) => ds.tiles.get(`${z}_${i}_${j}`);
 function addDetail(tile) {
@@ -320,7 +340,11 @@ controls.addEventListener('start', () => { controls.autoRotate = false; });
 // Trees exist within `radius` of the focus; detailed geometry within NEAR_DIST of the camera. Rebuild when idle
 // after the view has changed enough (focus, zoom or camera position).
 let lastFocus = null, lastRadius = 0, lastCam = null, lastMove = 0, shadowSize = 0;
-controls.addEventListener('change', () => { lastMove = performance.now(); });
+// Only user input counts as "moving": autorotation must not keep the trees from being built.
+let userDragging = false;
+controls.addEventListener('start', () => { userDragging = true; lastMove = performance.now(); });
+controls.addEventListener('end', () => { userDragging = false; lastMove = performance.now(); });
+controls.addEventListener('change', () => { if (userDragging || fly) lastMove = performance.now(); });
 function updateTrees() {
   if (!years.length) return;
   const dist = camera.position.distanceTo(controls.target);
@@ -341,15 +365,15 @@ function updateSun() {
   const dist = camera.position.distanceTo(controls.target);
   const S = THREE.MathUtils.clamp(dist * 0.8, 400, 1800);
   sun.target.position.copy(controls.target);
-  sun.position.copy(controls.target).addScaledVector(SUN_DIR, 6000);
+  sun.position.copy(controls.target).addScaledVector(weather.lightDir, 6000);
   sun.castShadow = dist < 14000;
   if (Math.abs(S - shadowSize) / S > 0.1) {
     Object.assign(sun.shadow.camera, { left: -S, right: S, top: S, bottom: -S, near: 100, far: 14000 });
     sun.shadow.camera.updateProjectionMatrix();
     shadowSize = S;
   }
-  uniforms.uSunView.value.copy(SUN_DIR).transformDirection(camera.matrixWorldInverse);
-  sky.position.copy(camera.position);
+  // leaf translucency toward the sun, daytime only
+  uniforms.uSunView.value.copy(weather.sunDir).transformDirection(camera.matrixWorldInverse).multiplyScalar(weather.uniforms.uDay.value);
 }
 
 // ---------- picking & info ----------
@@ -500,6 +524,34 @@ $('gps').onclick = () => {
 };
 
 $('aboutBtn').onclick = () => $('about').showModal();
+$('randomBtn').onclick = () => {
+  const p = pickStart();
+  if (!p) return;
+  const { target, cam } = startPose(p);
+  fly = { t0: performance.now(), dur: 2200, fromT: controls.target.clone(), fromC: camera.position.clone(), toT: target, toC: cam };
+  controls.autoRotate = true;
+  const [lon, lat] = utmToLonLat(p.x, p.y, p.zone);
+  status(`隨機地點 ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+};
+
+// ---------- weather controls (decorative) ----------
+for (const b of document.querySelectorAll('[data-wx]')) {
+  b.onclick = () => { weather.setPreset(b.dataset.wx); syncWeatherUi(); };
+}
+$('hour').addEventListener('input', (e) => { weather.auto = false; weather.setHour(+e.target.value); syncWeatherUi(); });
+$('autoTime').onclick = () => { weather.auto = !weather.auto; syncWeatherUi(); };
+function syncWeatherUi() {
+  for (const b of document.querySelectorAll('[data-wx]')) b.classList.toggle('on', b.dataset.wx === weather.preset);
+  $('autoTime').classList.toggle('on', weather.auto);
+  $('hour').value = weather.hour; $('hourVal').textContent = weather.label;
+}
+{
+  const presets = Object.keys(PRESETS);
+  weather.setPreset(params.get('weather') in PRESETS ? params.get('weather') : presets[Math.random() < 0.6 ? 0 : Math.random() < 0.7 ? 1 : 2]);
+  weather.setHour(params.has('hour') ? +params.get('hour') : 6.5 + Math.random() * 9);
+  weather.cur = { ...PRESETS[weather.preset] };
+  syncWeatherUi();
+}
 $('tilt').onclick = () => setMiniature(!miniature);
 
 // Field of view as a dolly zoom: keep the focus framed the same, change only the perspective.
@@ -547,11 +599,13 @@ function step(dt, now = performance.now()) {
   scene.fog.density = 0.000032 * THREE.MathUtils.clamp(18000 / dist, 0.04, 1);   // thin the haze for the island view
   const near = THREE.MathUtils.clamp(dist * 0.002, 5, 400);
   if (Math.abs(near - camera.near) / camera.near > 0.2) { camera.near = near; camera.far = Math.max(150000, dist * 5); camera.updateProjectionMatrix(); }
+  weather.update(dt, camera, controls.target, dist, { sun, hemi, fog: scene.fog });
   camera.updateMatrixWorld();
   streamTiles(now);
   uniforms.uTime.value = now / 1000;
   updateSun();
   updateTrees();
+  if (weather.auto && Math.floor(now / 250) !== Math.floor((now - dt * 1000) / 250)) { $('hour').value = weather.hour; $('hourVal').textContent = weather.label; }
   pin.scale.setScalar(Math.max(1, camera.position.distanceTo(pin.position) / 2500));
 }
 
@@ -559,7 +613,7 @@ function step(dt, now = performance.now()) {
 window.__app = {
   setYear: (y) => { playing = false; updatePlayButton(); setYearPos(years.indexOf(y)); },
   advance: (sec) => { for (let i = 0; i < sec * 30; i++) step(1 / 30); composer.render(); },
-  setMiniature, setFov,
+  setMiniature, setFov, weather,
   flyTo, get trees() { return forest.count; }, get treeStats() { return { ...forest.stats, triangles: Math.round(forest.triangles) }; },
   renderInfo: () => renderer.info.render,
   view: (lon, lat, dist, elevDeg, azDeg = 200) => {       // test hook: place the camera directly

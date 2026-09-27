@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { NODATA_F } from './data.js';
 import { lonLatToUtm, utmToLonLat } from './geo.js';
+import { CLOUD_GLSL, WATER_GLSL } from './weather.js';
 
 export const EXAG = 1.5;                 // vertical exaggeration (display only)
 export const DISPLAY_ZONE = 51;          // common display frame; zone-50 tiles are reprojected for display only
@@ -41,9 +42,11 @@ export function worldToDisplayUtm(frame, wx, wz) { return [wx + frame.ox, frame.
 
 const vertexDecl = /* glsl */`
 attribute float aFa; attribute float aFb; attribute float aNa; attribute float aNb; attribute float aOwn; attribute float aLand;
-uniform float uT; varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying vec3 vWorld;`;
+uniform float uT; varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld;`;
 const fragDecl = /* glsl */`
-varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying vec3 vWorld;
+varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld;
+${CLOUD_GLSL}
+${WATER_GLSL}
 float th12(vec2 p) { vec3 q = fract(vec3(p.xyx) * 0.1031); q += dot(q, q.yzx + 33.33); return fract((q.x + q.y) * q.z); }
 float tvn(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
   return mix(mix(th12(i), th12(i + vec2(1, 0)), f.x), mix(th12(i + vec2(0, 1)), th12(i + vec2(1, 1)), f.x), f.y); }
@@ -52,29 +55,54 @@ vec3 treeRamp(float f) {
   return f < 0.5 ? mix(bare, grass, f * 2.0) : mix(grass, forest, (f - 0.5) * 2.0);
 }`;
 
+const WEATHER_UNIFORMS = ['uCloud', 'uCloudOff', 'uSunDir', 'uCloudH', 'uDay', 'uSkyTop', 'uSkyHor', 'uSunCol', 'uWindS', 'uWaterT'];
+export const shareUniforms = (sh, uniforms, names = WEATHER_UNIFORMS) => { for (const n of names) sh.uniforms[n] = uniforms[n]; };
+
 export function makeTerrainMaterial(uniforms) {
   const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
   m.onBeforeCompile = (sh) => {
     sh.uniforms.uT = uniforms.uT;
+    shareUniforms(sh, uniforms);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>\n${vertexDecl}`)
       .replace('#include <begin_vertex>', `#include <begin_vertex>
         vF = mix(aFa, aFb, uT) / 100.0;
         vNd = mix(aNa, aNb, uT);
-        vOwn = aOwn; vLand = aLand;
+        vOwn = aOwn; vLand = aLand; vH = position.y;
         vWorld = (modelMatrix * vec4(position, 1.0)).xyz;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${fragDecl}`)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `
         if (vOwn < 0.5) discard;                                    // another tile (zone 51) owns this location
-        if (vLand < 0.5 && vWorld.y < 0.75) discard;                // open sea: let the sea plane show, no tile seams
+        if (vLand < 0.5 && vH < 0.75) discard;                      // open sea: the sea plane draws it
         vec3 c = treeRamp(clamp(vF, 0.0, 1.0));
         c *= 0.9 + 0.12 * tvn(vWorld.xz / 14.0) + 0.06 * tvn(vWorld.xz / 3.0);
         float stripe = step(0.5, fract((vWorld.x + vWorld.z) / 60.0));
         vec3 grey = vec3(dot(c, vec3(0.3, 0.59, 0.11)));
         c = mix(c, mix(grey, grey * 0.8, stripe), 0.75 * vNd);
-        c = mix(c, vec3(0.55, 0.71, 0.79), max(step(vWorld.y, 0.75), step(vLand, 0.5)));   // DEM <= 0 m or WorldCover water
-        vec4 diffuseColor = vec4(c, opacity);`);
+        float shade = cloudShadow(vWorld);
+        c *= shade;
+        vec4 diffuseColor = vec4(c, opacity);`)
+      .replace('#include <opaque_fragment>', `#include <opaque_fragment>
+        // water: DEM <= 0 m (soft edge) or WorldCover water
+        float wm = max(1.0 - smoothstep(0.3, 1.2, vH), smoothstep(0.65, 0.35, vLand));
+        gl_FragColor.rgb = mix(gl_FragColor.rgb, waterShade(vWorld, 0.35 + 0.65 * uDay) * shade, wm);`);
+  };
+  return m;
+}
+
+// The sea: same water shading as rivers and lakes on the terrain, so coasts join without a seam.
+export function makeWaterMaterial(uniforms) {
+  const m = new THREE.MeshLambertMaterial({ color: 0x8fb6c8 });
+  m.onBeforeCompile = (sh) => {
+    shareUniforms(sh, uniforms);
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWorld;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWorld = (modelMatrix * vec4(position, 1.0)).xyz;');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', `#include <common>\nvarying vec3 vWorld;\n${CLOUD_GLSL}\n${WATER_GLSL}`)
+      .replace('#include <opaque_fragment>', `#include <opaque_fragment>
+        gl_FragColor.rgb = waterShade(vWorld, 0.35 + 0.65 * uDay) * cloudShadow(vWorld);`);
   };
   return m;
 }
