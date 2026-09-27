@@ -1,0 +1,281 @@
+[
+ {
+  "file": "2011H1.ods",
+  "year": 2011,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7925981/a47d99c2-d3bb-4bf2-8fbe-6b8c18882a18.ods",
+  "bytes": 89821,
+  "sha256": "e377b7134595d397eb9db952387f010516bd8e02fd7e558183af443a7452d461",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2011H2.ods",
+  "year": 2011,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7925973/f7197cc1-cff1-4c3d-92e8-4c5cfdeef99e.ods",
+  "bytes": 134165,
+  "sha256": "975e77453f762020d8624838579a03b47c127c81c248cb2ff68e52bcae169fae",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2012H1.ods",
+  "year": 2012,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7925969/6379838c-8c4b-4570-a1d4-1bca436eacc8.ods",
+  "bytes": 82203,
+  "sha256": "19e55e21f42a524dbbf712a9b60bee855ccf981a5b8692fe485e3dbaabfb4bcf",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2012H2.ods",
+  "year": 2012,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7925966/a64c19d6-3645-4e72-bb73-717627357fbe.ods",
+  "bytes": 127538,
+  "sha256": "c970485f64b04dae48270d9e377306288270c9a74cb4902e2b449c6b15e1b881",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2013H1.ods",
+  "year": 2013,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7925960/6a9189bf-ce00-4679-aa4a-f6e38cc59036.ods",
+  "bytes": 85109,
+  "sha256": "26f4e7f4fac89d7251e0d7066ae0c3fa125116472a99e7d4f2674186e14d48ce",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2013H2.ods",
+  "year": 2013,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7925958/6b76f451-45c8-4a12-a08b-e835ee8b1c81.ods",
+  "bytes": 142193,
+  "sha256": "88c4f46adf263f8f4ca003cd66ed7ad512098a6a67429233c66e51d00c9c471f",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2014H1.ods",
+  "year": 2014,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7925956/ea9edf29-c41c-423f-9203-6bacd77c632f.ods",
+  "bytes": 72718,
+  "sha256": "af7d7da003a63baf3389f1e48a9abef54fe36bb8026258e1fd93d3981024d41f",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2014H2.ods",
+  "year": 2014,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7925954/d9e0ef55-f4ba-4494-9649-a836f509c059.ods",
+  "bytes": 127879,
+  "sha256": "2928fa5220b679ac417147ab444965d5bdc2e9fc86bda64bfd93e360ab42572d",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2015H1.ods",
+  "year": 2015,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7925951/e766d06e-5ed6-4adc-bcd1-bbabaaed9da5.ods",
+  "bytes": 79529,
+  "sha256": "bcb2ea82b57797cf6b7ba05777894037e713259671d11ba448577a50b46cdc34",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2015H2.ods",
+  "year": 2015,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7925950/74ed3c8f-ac68-44db-bd18-d3bf73ce745a.ods",
+  "bytes": 133410,
+  "sha256": "c431718a8a74c7551ba4ebbb7399b6de16685eaf2a6263452d1645e8fc2c4069",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2016H1.ods",
+  "year": 2016,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7924376/93207ba2-0876-40b3-b507-1348e2b43d9f.ods",
+  "bytes": 100617,
+  "sha256": "08d05743aa7789d175b68c2751422de343034bb4bd50afc85c4c0c1013588906",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2016H2.ods",
+  "year": 2016,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7924379/88a165df-42a8-4934-adf4-d5e97ed6dd5e.ods",
+  "bytes": 181371,
+  "sha256": "3f05d2e31a9c7298045430d46eb080d82279e404e1c49083841909698d63f21f",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2017H1.ods",
+  "year": 2017,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7924255/f73aacf7-62f6-4fd4-a2e6-38469757e0e1.ods",
+  "bytes": 131473,
+  "sha256": "c7c7a2d5c13bd07969a23a9ac0976123ac877d00c8bce969a42020107df1675f",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2017H2.ods",
+  "year": 2017,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7924252/11236f99-5592-4f27-a015-05a30af573df.ods",
+  "bytes": 178276,
+  "sha256": "6a18787c16cf9c0bab22fc59c288ad3875992f228291e247e74503345290b3aa",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2018H1.ods",
+  "year": 2018,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/7924256/e3b32936-aff9-4f6a-8c01-8d7cb6aadb9d.ods",
+  "bytes": 44727,
+  "sha256": "fab23d317e0a1e1d794b2ba3d77a338cada666a769f60d1afb9e1b410c659db0",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2018H2.ods",
+  "year": 2018,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/8027482/6e9d7ee2-88d5-40f9-9709-a6930c921b23.ods",
+  "bytes": 255849,
+  "sha256": "1355b29341bb6c32cff96ff2ad5049258ef25a737720cc17da3b28abf5a2d1c0",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2019H1.ods",
+  "year": 2019,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/8066903/6a620d8d-6687-401f-9096-ca038bc7b96a.ods",
+  "bytes": 75290,
+  "sha256": "b3ddd71b24ac276eb3e603c0665d105a65d9b0c4038a73a86140a82011160f80",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2019H2.ods",
+  "year": 2019,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/8178257/c263b5cf-2393-4717-8663-e05513b9a795.ods",
+  "bytes": 241869,
+  "sha256": "97a276e6c82643234dce8d58778d225a3e808514ff3ff046906f4c06ed6f9283",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2020H1.ods",
+  "year": 2020,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/8253328/b026c048-7d61-4f52-a370-458c44c89495.ods",
+  "bytes": 84664,
+  "sha256": "0b0669f7303b364a5f7a7f34113ad984488508ee800c2bbba2c5ca4ca7173ce6",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2020H2.ods",
+  "year": 2020,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/8409757/5007177c-7391-4e27-a4a5-91f7952bed81.ods",
+  "bytes": 275323,
+  "sha256": "d2390c7d281ed7322120d549c22c54c71314330b0921f9522566df05672625da",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2021H1.ods",
+  "year": 2021,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/8445683/a9e1b3d3-ada3-4cd8-9018-e736b6f3b0e3.ods",
+  "bytes": 111606,
+  "sha256": "b89ac5ac885590263aa59f9c9fddfa8f360f068f507d4267b650fb1a28d36030",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2021H2.ods",
+  "year": 2021,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/8545161/91d94669-dc54-4ac2-8329-573435745608.ods",
+  "bytes": 276361,
+  "sha256": "117854bc47ba217ed836ab37a4c4d43c38f82b614c58bf88329142184537c9e6",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2022H1.ods",
+  "year": 2022,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/8746654/810648de-424d-4b7d-906a-3e987c29d269.ods",
+  "bytes": 85955,
+  "sha256": "859ab5ff2c6b0387439c53549527c064d1aa480fab4078c97ac1049b50c7eb34",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2022H2.ods",
+  "year": 2022,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/9008177/6d4c9c58-cf69-4b1c-9657-ff90a0098ec7.ods",
+  "bytes": 283086,
+  "sha256": "8227d63614613b35d5a804ef70e523c6fee56de740b7600ecf34a91b2da2b3cb",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2023H1.ods",
+  "year": 2023,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/9032490/d70aafd8-bbb3-4de6-ac2c-6b5c5d1fa450.ods",
+  "bytes": 100179,
+  "sha256": "a7a61d6d750505cc7f30e23fde30d523b4313dcf3ea9784c78fb47677f47703a",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2023H2.ods",
+  "year": 2023,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/9171078/e378d02e-afa2-4735-b9fa-8d0d33929c54.ods",
+  "bytes": 280820,
+  "sha256": "c091d3938a318cf2f1a42ead1c2e23209c1c3e61c3ccf76a31aca391c6723821",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2024H1.ods",
+  "year": 2024,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/9274130/bac66a52-d035-43bd-a7ac-8de7bdf2ac86.ods",
+  "bytes": 80039,
+  "sha256": "c2272dbbf1a207fe99154c650156842a920b7cfc88afd95958c5bf84bcd3179e",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2024H2.ods",
+  "year": 2024,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/9388955/090b2ac6-5404-4ed8-a5c6-a8f8f0d11c49.ods",
+  "bytes": 266522,
+  "sha256": "801ce8606f8cbf7fa8adf99d4c75986e0f28388e7f53ad7738675645a5055a46",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2025H1.ods",
+  "year": 2025,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/9471026/a79adab0-8121-424b-ba1c-3b078997be2c.ods",
+  "bytes": 81747,
+  "sha256": "0100fb84335f3e76d14a2187add61a5068d80de021fab7411310081404339791",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2025H2.ods",
+  "year": 2025,
+  "half": 2,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/9659270/39c4cc93-5615-4bb9-87e8-d5ade4d538a0.ods",
+  "bytes": 272557,
+  "sha256": "048acbf6b3e2636fca52adb52220946fe55f1918bef8b92fa0ead5e9eae34a48",
+  "sha256_matches_site": true
+ },
+ {
+  "file": "2026H1.ods",
+  "year": 2026,
+  "half": 1,
+  "url": "https://www-ws.gov.taipei/001/Upload/348/relfile/46085/9704461/d82db567-13ad-431a-b2c6-85b812e78749.ods",
+  "bytes": 104051,
+  "sha256": "86df090b6f758c57d866e6d332ab845d34a390bc0781b21a0cbc7e16f63d7934",
+  "sha256_matches_site": true
+ }
+]

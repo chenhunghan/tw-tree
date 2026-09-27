@@ -1,0 +1,6 @@
+build/
+.venv/
+__pycache__/
+site/data/dev/
+.DS_Store
+site/data/

@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>臺灣樹冠時光機</title>
+<meta name="description" content="1984–2026 年臺灣樹冠覆蓋的 3D 時間軸，資料來自 Landsat 衛星。">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/",
+    "apache-arrow": "https://cdn.jsdelivr.net/npm/apache-arrow@21.2.0/+esm"
+  }
+}
+</script>
+<style>
+  :root {
+    --ink: #1d2a22; --muted: #5b6b61; --panel: rgba(250, 250, 245, 0.88); --line: rgba(29, 42, 34, 0.14);
+    --forest: #2b6a3a; --leaf: #7fb069; --bare: #dcd4c2; --loss: #a8622d; --accent: #2b6a3a;
+    font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    color: var(--ink);
+  }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #cfe0e8; }
+  #scene { position: fixed; inset: 0; }
+  .panel { position: fixed; background: var(--panel); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 6px 24px rgba(20, 40, 30, 0.12); }
+  header.panel { top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; padding: 12px 14px; width: min(420px, calc(100vw - 24px)); box-sizing: border-box; }
+  h1 { margin: 0; font-size: 18px; letter-spacing: 0.04em; }
+  h1 small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; letter-spacing: 0; }
+  .search { display: flex; gap: 6px; margin-top: 10px; }
+  .search input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: #fff; }
+  button { font: inherit; font-size: 13px; padding: 7px 11px; border-radius: 9px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; white-space: nowrap; }
+  button:hover { background: #f1f4ee; }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  button.primary:hover { background: #235a31; }
+  .fov { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+  .fov input { width: 90px; accent-color: var(--accent); }
+  .fov output { width: 2.6em; font-variant-numeric: tabular-nums; }
+  button.on { background: #e6efe2; border-color: var(--accent); color: var(--accent); }
+  #searchStatus { margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 1em; }
+  #searchStatus.warn { color: #8a5a12; }
+  .stat { display: flex; gap: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  .stat b { display: block; font-size: 17px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  .stat .down { color: var(--loss); } .stat .up { color: var(--forest); }
+
+  #timeline { left: 12px; right: 12px; bottom: calc(12px + env(safe-area-inset-bottom, 0px)); padding: 10px 16px 12px; }
+  .tl-row { display: flex; align-items: center; gap: 14px; }
+  #play { width: 44px; height: 44px; border-radius: 50%; padding: 0; font-size: 16px; flex: none; }
+  #yearLabel { font-size: 34px; font-weight: 700; font-variant-numeric: tabular-nums; width: 3.2em; flex: none; letter-spacing: 0.02em; }
+  .tl-track { position: relative; flex: 1; min-width: 0; }
+  #slider { width: 100%; margin: 0; accent-color: var(--accent); }
+  #bars { display: flex; align-items: flex-end; gap: 1px; height: 18px; margin-top: 2px; }
+  #bars span { flex: 1; background: var(--leaf); opacity: 0.55; border-radius: 1px 1px 0 0; min-height: 2px; }
+  #bars span.low { background: var(--loss); opacity: 0.8; }
+  #ticks { position: relative; height: 14px; font-size: 10px; color: var(--muted); }
+  #ticks span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  .legend { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); margin-top: 4px; flex-wrap: wrap; }
+  .ramp { width: 120px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--bare), #a3bd78 50%, var(--forest)); }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 3px; }
+
+  #info { top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: min(320px, calc(100vw - 24px)); padding: 12px 14px; font-size: 12.5px; box-sizing: border-box; max-height: calc(100vh - 190px); overflow: auto; }
+  #info h2 { font-size: 14px; margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; }
+  #info .close { border: none; background: none; font-size: 18px; padding: 0 4px; }
+  #info dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 6px 0; }
+  #info dt { color: var(--muted); } #info dd { margin: 0; font-variant-numeric: tabular-nums; word-break: break-all; }
+  #info code { font-size: 11px; }
+  #spark { width: 100%; height: 70px; display: block; margin-top: 6px; }
+  .note { color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+  #credits { right: 12px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); padding: 5px 9px; font-size: 10.5px; color: var(--muted); border-radius: 8px; max-width: calc(100vw - 24px); box-sizing: border-box; }
+  #credits a { color: inherit; }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #dfe9e4; z-index: 5; font-size: 14px; color: var(--muted); transition: opacity 0.6s; }
+  #loading .bar { width: 220px; height: 4px; background: var(--line); border-radius: 2px; margin-top: 10px; overflow: hidden; }
+  #loading .bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.2s; }
+
+  dialog { border: none; border-radius: 14px; padding: 0; width: min(680px, calc(100vw - 32px)); max-height: calc(100vh - 64px); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25); color: var(--ink); }
+  dialog::backdrop { background: rgba(20, 30, 25, 0.35); }
+  dialog .body { padding: 18px 22px; overflow: auto; max-height: calc(100vh - 140px); font-size: 13.5px; line-height: 1.65; }
+  dialog h2 { margin: 0 0 4px; font-size: 18px; } dialog h3 { margin: 16px 0 4px; font-size: 14px; }
+  dialog ul { padding-left: 1.2em; margin: 4px 0; } dialog li { margin: 3px 0; }
+  dialog footer { padding: 10px 22px 16px; text-align: right; border-top: 1px solid var(--line); }
+  @media (max-width: 640px) {
+    #yearLabel { font-size: 26px; } #play { width: 38px; height: 38px; }
+    #credits { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
+    #info { top: auto; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); max-height: 40vh; }
+    .stat { gap: 10px; }
+  }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+
+<header class="panel">
+  <h1>臺灣樹冠時光機<small>1984–2026 · <span id="regionName">臺北試行版</span></small></h1>
+  <form class="search" id="searchForm" autocomplete="off">
+    <input id="q" type="search" placeholder="地址、地標或座標，例：臺北101、25.0339, 121.5645" aria-label="搜尋地點">
+    <button class="primary" type="submit">前往</button>
+    <button type="button" id="gps" title="使用裝置定位">我的位置</button>
+  </form>
+  <div id="searchStatus"></div>
+  <div class="stat">
+    <div>樹冠面積<b id="statArea">—</b></div>
+    <div>相較 <span id="statBaseYear">1984</span><b id="statDelta">—</b></div>
+    <div>當年影像<b id="statScenes">—</b></div>
+  </div>
+</header>
+
+<aside class="panel" id="info" hidden>
+  <h2><span>這個位置</span><button class="close" id="infoClose" aria-label="關閉">×</button></h2>
+  <div id="infoBody"></div>
+</aside>
+
+<section class="panel" id="timeline" aria-label="時間軸">
+  <div class="tl-row">
+    <button id="play" aria-label="播放/暫停">❚❚</button>
+    <div id="yearLabel">1984</div>
+    <div class="tl-track">
+      <input id="slider" type="range" min="0" max="1" step="0.001" value="0" aria-label="年份">
+      <div id="bars" title="每年可用的 Landsat 影像數（橘色：少於 5 景，低信心）"></div>
+      <div id="ticks"></div>
+    </div>
+  </div>
+  <div class="legend">
+    <span>樹冠比例</span><span>0%</span><span class="ramp"></span><span>100%</span>
+    <span><i class="sw" style="background:#9a9a9a"></i>當年無清晰觀測（沿用前一次）</span>
+    <span><i class="sw" style="background:var(--loss)"></i>樹冠減少中</span>
+    <span style="margin-left:auto; display:flex; gap:6px; align-items:center"><label class="fov" title="視角（FOV）：小＝望遠、扁平的迷你感；大＝廣角、景深強">視角 <input id="fov" type="range" min="15" max="75" step="1" value="34"> <output id="fovVal">34°</output></label><button id="tilt" type="button" title="移軸模糊（M）">迷你世界</button><button id="aboutBtn" type="button">資料與限制</button></span>
+  </div>
+</section>
+
+<div class="panel" id="credits">
+  Landsat: USGS · ESA WorldCover 2021 (CC BY 4.0) · Copernicus DEM · 地址搜尋 ©
+  <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (Nominatim)
+</div>
+
+<div id="loading"><div>載入樹冠資料…<div class="bar"><i id="loadBar"></i></div><div id="loadMsg" class="note" style="margin-top:8px"></div></div></div>
+
+<dialog id="about">
+  <div class="body">
+    <h2>資料與限制</h2>
+    <p>每個 30 公尺像元的樹冠比例，由 Landsat 4、5、7、8、9 衛星影像（USGS Collection 2 Level-2，Tier 1）逐年估計。畫面上的樹是示意：數量與樹冠比例成正比，不代表實際的單株樹木。</p>
+    <h3>怎麼算的</h3>
+    <ul>
+      <li>每年、每個像元取一景真實觀測（medoid 合成），因此每個數值都能追溯到單一原始影像與像元。點選地面即可查看來源影像編號。</li>
+      <li>像元位置保留 Landsat 原始格網（UTM，像元中心為 30 公尺整數倍），未經重新取樣。</li>
+      <li>樹冠比例模型以 ESA WorldCover 2021 的樹木類別為參照，用 2021 年影像訓練；在保留區塊上與參照的一致性 <span id="metricR2">R² ≈ 0.71</span>，這是與參照的一致程度，不是實地驗證的準確度。</li>
+      <li>Landsat 5 先以臺灣重疊年份擬合的係數校正到 Landsat 7，再以 Roy 等人（2016）係數調和至 Landsat 8；模型只用 Landsat 8 影像訓練。</li>
+    </ul>
+    <h3>限制</h3>
+    <ul>
+      <li>1982、1983、1985 年臺北沒有可用影像；1984、1986 年只有 3 景，屬低信心年份（時間軸以橘色標示）。</li>
+      <li>原始影像的定位誤差約 12 公尺（RMSE），不同年份之間可能有不到一個像元的偏移。</li>
+      <li><b>感測器差異校正（第二版）：</b>同年、同像元比對顯示 Landsat 5（TM）比 Landsat 7 低約 4.9 個百分點；第二版加入以臺灣北部重疊年份擬合的 TM→ETM+ 校正後，差距降到約 −0.4。1999 年前後的跳階由 +6,470 公頃縮小為 +2,660 公頃。</li>
+      <li><b>2013 年後的上升主要是量測效應，不是新增樹冠：</b>只用 Landsat 8 重建 2013–2021 年，趨勢依然存在（50.9% → 65.2%），所以不是感測器更替造成。但在 2000 年起就是郁閉、之後沒有砍伐的穩定森林上，數值同樣從約 77% 升到 99%，並與影像的氣膠（霧霾）品質旗標高度相關（r = −0.86）；獨立的 Sentinel-2 樹木機率（Dynamic World）同期持平。全臺抽樣顯示這只發生在北部，中南部森林持平。這是北部影像光譜逐年變化（霧霾、季節組成）被模型讀成樹冠變化。解讀北部 2013 年後的趨勢時，約 8 個百分點以內的變化不宜當成真實增減。</li>
+      <li>模型只用 2021 年訓練，套用到 1980–90 年代時假設光譜關係不變，尚未以有日期的高解析影像獨立驗證。</li>
+      <li>30 公尺像元約 0.09 公頃，多數行道樹小於一個像元；樹冠比例反映的是像元內的樹冠占比。</li>
+      <li>某年沒有清晰觀測的像元，畫面沿用前一次觀測並以灰色條紋標示，不會被當成樹冠變化。</li>
+      <li>地形高度來自 Copernicus DEM GLO-30，僅供顯示，並放大 1.5 倍。</li>
+      <li>地址搜尋使用 OpenStreetMap 的 Nominatim；臺灣門牌資料不完整，找不到時會逐步退到巷弄、路段或行政區，並顯示達到的精度。</li>
+    </ul>
+    <h3>來源</h3>
+    <ul>
+      <li>Landsat Collection 2 Level-2 courtesy of the U.S. Geological Survey（經 Google Earth Engine 處理）</li>
+      <li>ESA WorldCover 2021 v200，CC BY 4.0</li>
+      <li>Copernicus DEM GLO-30 © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA</li>
+      <li>地址搜尋：Nominatim / © OpenStreetMap contributors（ODbL）</li>
+    </ul>
+    <p class="note">資料檔（Apache Arrow）每個像元都帶有 UTM 座標與來源影像索引，可用 Python（polars、pyarrow、DuckDB）直接開啟。</p>
+  </div>
+  <footer><button id="aboutClose" class="primary">關閉</button></footer>
+</dialog>
+
+<script type="module" src="./js/app.js"></script>
+</body>
+</html>
