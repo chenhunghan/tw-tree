@@ -64,6 +64,42 @@ vec3 treeRamp(float f, float elev, float slope, vec2 xz) {
   vec3 grass = mix(vec3(0.42, 0.52, 0.30), vec3(0.45, 0.50, 0.33), smoothstep(1500.0, 3000.0, elev));
   vec3 forest = mix(vec3(0.13, 0.30, 0.13), vec3(0.08, 0.21, 0.15), smoothstep(1200.0, 2600.0, elev));
   return f < 0.5 ? mix(bare, grass, f * 2.0) : mix(grass, forest, (f - 0.5) * 2.0);
+}
+// Nearest crown centre on a jittered grid: xy = offset from the centre, z = cell id, w = distance to the cell edge.
+vec4 crownCell(vec2 p) {
+  vec2 i = floor(p), f = fract(p); float d1 = 9.0, d2 = 9.0; vec2 o1 = vec2(0.0); float id = 0.0;
+  for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec2 g = vec2(float(x), float(y)), c = g + 0.15 + 0.7 * vec2(th12(i + g), th12(i + g + 17.3)) - f;
+    float d = dot(c, c);
+    if (d < d1) { d2 = d1; d1 = d; o1 = c; id = th12(i + g + 5.1); } else if (d < d2) d2 = d;
+  }
+  return vec4(-o1, id, sqrt(d2) - sqrt(d1));
+}
+// Dense forest as a canopy, by on-screen scale (fw = crown cells per screen pixel):
+//  far (crowns < 1 px): the flat ramp colour; mid (crowns ~1-12 px, i.e. beyond the instanced trees): lit crowns
+//  (~9 m) where the pixel's tree fraction says there are trees, shade between; near (crowns larger, where the
+//  instanced trees stand): soft shaded understorey, no cell pattern. Means stay close to the flat ramp colour.
+vec3 canopy(vec3 c, float f, vec2 xz) {
+  float cov = smoothstep(0.2, 0.75, f);
+  if (cov <= 0.0) return c;
+  vec2 cp = xz / 8.5;
+  float fw = length(fwidth(cp));
+  float wFar = smoothstep(0.7, 1.3, fw), wNear = 1.0 - smoothstep(0.05, 0.11, fw);
+  vec3 under = c * (0.62 + 0.3 * tvn(xz / 2.2) + 0.18 * tvn(xz / 7.0)) * mix(vec3(1.0), vec3(0.92, 1.02, 0.95), 0.5);
+  vec3 crownsC = c;
+  if (wFar < 1.0 && wNear < 1.0) {
+    vec4 cc = crownCell(cp);
+    float r = length(cc.xy) / 0.62, dome = sqrt(max(0.0, 1.0 - r * r));
+    vec3 n = normalize(vec3(cc.x, dome * 0.9 + 0.1, cc.y));
+    float lit = 0.62 + 0.55 * max(dot(n, normalize(uSunDir)), 0.0) * (0.4 + 0.6 * uDay);
+    float treed = step(cc.z, f * 1.08);
+    float crown = treed * smoothstep(1.05, 0.6, r);
+    float tone = 0.86 + 0.3 * th12(vec2(cc.z * 91.0, 3.7));
+    vec3 crownC = c * lit * tone * mix(vec3(1.0), vec3(1.08, 1.06, 0.9), 0.5 * dome);   // sunlit tops a little yellower
+    crownsC = mix(c * 0.55, crownC, crown) / mix(0.55, 1.0, f * 0.95);
+  }
+  vec3 detailC = mix(mix(crownsC, under, wNear), c, wFar);
+  return mix(c, detailC, cov);
 }`;
 
 const WEATHER_UNIFORMS = ['uCloud', 'uCloudOff', 'uSunDir', 'uCloudH', 'uDay', 'uSkyTop', 'uSkyHor', 'uSunCol', 'uWindS', 'uWaterT', 'uNight', 'uYearF'];
@@ -87,6 +123,7 @@ export function makeTerrainMaterial(uniforms) {
         if (vOwn < 0.5) discard;                                    // another tile (zone 51) owns this location
         if (vLand < 0.18 && vH < 6.0) discard;                      // sea-level water (DEM < 4 m): the sea plane draws it
         vec3 c = treeRamp(clamp(vF, 0.0, 1.0), vH / ${EXAG.toFixed(2)}, 1.0 - normalize(vNw).y, vWorld.xz);
+        c = canopy(c, clamp(vF, 0.0, 1.0), vWorld.xz);
         c *= 0.9 + 0.12 * tvn(vWorld.xz / 14.0) + 0.06 * tvn(vWorld.xz / 3.0);
         float stripe = step(0.5, fract((vWorld.x + vWorld.z) / 60.0));
         vec3 grey = vec3(dot(c, vec3(0.3, 0.59, 0.11)));

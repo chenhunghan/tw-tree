@@ -417,10 +417,59 @@ addEventListener('keydown', (e) => {
 });
 controls.addEventListener('start', () => { controls.autoRotate = false; });
 
+// ---------- camera: rotate / tilt buttons, compass (north-up), keys Q/E rotate, R/F tilt, N north ----------
+// MapControls pans with the left button; dragging with the right button or Shift/Ctrl/⌘, or a two-finger twist, rotates.
+const nudge = { az: 0, pol: 0 }, sph = new THREE.Spherical(), camOff = new THREE.Vector3();
+const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+function rotateView(daz, dpol = 0) {          // pending turn is capped, so a held key keeps a steady pace
+  nudge.az = THREE.MathUtils.clamp(nudge.az + daz, -Math.PI, Math.PI); nudge.pol = THREE.MathUtils.clamp(nudge.pol + dpol, -0.6, 0.6);
+  controls.autoRotate = false; lastMove = performance.now();
+}
+function applyNudge(dt) {
+  if (Math.abs(nudge.az) < 1e-4 && Math.abs(nudge.pol) < 1e-4) return;
+  const k = 1 - Math.exp(-dt * 7), da = nudge.az * k, dp = nudge.pol * k;
+  nudge.az -= da; nudge.pol -= dp;
+  sph.setFromVector3(camOff.copy(camera.position).sub(controls.target));
+  sph.theta += da; sph.phi = THREE.MathUtils.clamp(sph.phi + dp, 0.05, controls.maxPolarAngle);
+  camera.position.copy(controls.target).add(camOff.setFromSpherical(sph));
+  lastMove = performance.now();
+}
+let needleAz = null;
+function drawCompass() {
+  const az = controls.getAzimuthalAngle();
+  if (needleAz !== null && Math.abs(az - needleAz) < 0.003) return;
+  needleAz = az;
+  $('compass').querySelector('svg').style.transform = `rotate(${az}rad)`;
+}
+const ROT = 0.45, TILT = 0.18;
+$('rotL').onclick = () => rotateView(ROT);
+$('rotR').onclick = () => rotateView(-ROT);
+$('tiltUp').onclick = () => rotateView(0, -TILT);
+$('tiltDn').onclick = () => rotateView(0, TILT);
+$('compass').onclick = () => rotateView(-wrapAngle(controls.getAzimuthalAngle() + nudge.az));
+addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT' || e.metaKey || e.ctrlKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'q') rotateView(ROT * 0.5); else if (k === 'e') rotateView(-ROT * 0.5);
+  else if (k === 'r') rotateView(0, -TILT * 0.5); else if (k === 'f') rotateView(0, TILT * 0.5);
+  else if (k === 'n') $('compass').click();
+});
+
 // ---------- tree level of detail + sun ----------
-// Trees exist within `radius` of the focus; detailed geometry within NEAR_DIST of the camera. Rebuild when idle
-// after the view has changed enough (focus, zoom or camera position).
-let lastFocus = null, lastRadius = 0, lastCam = null, lastMove = 0, shadowSize = 0;
+// Trees exist within `radius` of the focus and inside the view cone; leaf-card crowns within NEAR_DIST of the camera,
+// simplified ones to MID_DIST, envelopes beyond. Rebuild when idle after the view has changed enough (focus, zoom,
+// camera position or heading). Beyond the trees the terrain shader draws the canopy.
+// treeQ scales the radius to hold the frame rate: it shrinks when frames are slow and grows back when there is room.
+let lastFocus = null, lastRadius = 0, lastCam = null, lastMove = 0, shadowSize = 0, lastHeading = 0;
+let treeQ = +(params.get('trees') || 1), frameEma = 1 / 60, lastQ = 0;
+const fixedQ = params.has('trees');
+function adaptTrees(dt, now) {
+  frameEma += (dt - frameEma) * 0.05;
+  if (fixedQ || now - lastQ < 2500 || !lastFocus) return;
+  lastQ = now;
+  if (frameEma > 1 / 38 && treeQ > 0.4) { treeQ = Math.max(0.4, treeQ * 0.82); lastFocus = null; }
+  else if (frameEma < 1 / 56 && treeQ < 1) { treeQ = Math.min(1, treeQ * 1.12); lastFocus = null; }
+}
 // Only user input counts as "moving": autorotation must not keep the trees from being built.
 let userDragging = false;
 controls.addEventListener('start', () => { userDragging = true; lastMove = performance.now(); });
@@ -431,13 +480,18 @@ function updateTrees() {
   const dist = camera.position.distanceTo(controls.target);
   if (dist > 14000) { forest.visible = false; city.visible = false; return; }
   forest.visible = true; city.visible = true;
-  const radius = THREE.MathUtils.clamp(dist * 0.75, 700, 2400);
-  const moved = !lastFocus || lastFocus.distanceTo(controls.target) > radius * 0.3 ||
-    Math.abs(radius - lastRadius) / lastRadius > 0.35 || lastCam.distanceTo(camera.position) > Math.max(150, dist * 0.2);
+  const radius = THREE.MathUtils.clamp(dist * 1.6, 1000, 3600) * treeQ;
+  const dir = camera.getWorldDirection(new THREE.Vector3()), heading = Math.atan2(dir.x, dir.z);
+  const turned = Math.abs(Math.atan2(Math.sin(heading - lastHeading), Math.cos(heading - lastHeading))) > 0.3;
+  const moved = !lastFocus || lastFocus.distanceTo(controls.target) > radius * 0.25 || turned ||
+    Math.abs(radius - lastRadius) / lastRadius > 0.3 || lastCam.distanceTo(camera.position) > Math.max(150, dist * 0.2);
   if (moved && performance.now() - lastMove > 200) {
-    lastFocus = controls.target.clone(); lastRadius = radius; lastCam = camera.position.clone();
-    forest.build(ds, frame, lastFocus, radius, years, lastCam);
-    city.build(ds, frame, lastFocus, radius * 1.3);
+    lastFocus = controls.target.clone(); lastRadius = radius; lastCam = camera.position.clone(); lastHeading = heading;
+    // horizontal half-angle of the view plus a margin, so a small turn doesn't show the edge; top-down views keep all
+    const hfov = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect);
+    const steep = -dir.y > 0.8;
+    forest.build(ds, frame, lastFocus, radius, years, lastCam, dir, steep ? Math.PI : hfov + 0.55, NEAR_DIST * Math.min(1, treeQ * treeQ));
+    city.build(ds, frame, lastFocus, THREE.MathUtils.clamp(dist * 0.75, 700, 2400) * 1.3);
     const k = Math.min(Math.floor(yearPos), years.length - 2);
     forest.setYears(years[k], years[k + 1]);
   }
@@ -677,7 +731,9 @@ function step(dt, now = performance.now()) {
     camera.position.lerpVectors(fly.fromC, fly.toC, e);
     if (t >= 1) fly = null;
   }
+  applyNudge(dt);
   controls.update();
+  drawCompass();
   const dist = camera.position.distanceTo(controls.target);
   scene.fog.density = 0.000032 * THREE.MathUtils.clamp(18000 / dist, 0.04, 1);   // thin the haze for the island view
   const near = THREE.MathUtils.clamp(dist * 0.002, 5, 400);
@@ -687,6 +743,7 @@ function step(dt, now = performance.now()) {
   streamTiles(now);
   uniforms.uTime.value = now / 1000;
   updateSun();
+  adaptTrees(dt, now);
   updateTrees();
   if (Math.floor(now / 100) !== Math.floor((now - dt * 1000) / 100)) drawMinimap();
   if (weather.auto && Math.floor(now / 250) !== Math.floor((now - dt * 1000) / 250)) { $('hour').value = weather.hour; $('hourVal').textContent = weather.label; }
@@ -697,8 +754,9 @@ function step(dt, now = performance.now()) {
 window.__app = {
   setYear: (y) => { playing = false; updatePlayButton(); setYearPos(years.indexOf(y)); },
   advance: (sec) => { for (let i = 0; i < sec * 30; i++) step(1 / 30); composer.render(); },
-  setMiniature, setFov, weather,
-  flyTo, get trees() { return forest.count; }, get buildings() { return city.n; }, get treeStats() { return { ...forest.stats, triangles: Math.round(forest.triangles) }; },
+  setMiniature, setFov, weather, renderer, sun, forest,
+  camAngles: () => ({ az: controls.getAzimuthalAngle(), pol: controls.getPolarAngle() }),
+  flyTo, get trees() { return forest.count; }, get buildings() { return city.n; }, get treeStats() { return { ...forest.stats, triangles: Math.round(forest.triangles) }; }, get treeQ() { return treeQ; },
   renderInfo: () => renderer.info.render,
   view: (lon, lat, dist, elevDeg, azDeg = 200) => {       // test hook: place the camera directly
     const [X, Y] = lonLatToUtm(lon, lat, DISPLAY_ZONE);

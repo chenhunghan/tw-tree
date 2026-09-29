@@ -175,6 +175,21 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   forest). Weather and time of day are decorative only (URL `?weather=clear|cloudy|rain&hour=0-24`), stated in the about
   panel. Each visit starts ~1.7 km from a random land pixel with mid-range, changing tree cover; 隨機地點 flies to another.
   Tree LOD rebuilds ignore autorotation (only user input counts as moving).
+- **Trees and canopy (2026-09-29):** crowns are clusters of alpha-tested leaf cards (four sprig textures painted on a canvas
+  at startup: broadleaf, acacia, conifer needles, bamboo; read as linear greys that multiply the vertex colour) around a
+  small dark core, with crown-shaped normals. LODs: near (< 320 m: cards per cluster), mid (< 1.5 km: one envelope core +
+  16 cards), far (envelope only, no shadow). Instances cover `clamp(1.6 × distance, 1–3.6 km)` around the focus, only
+  inside the view cone (horizontal half-FOV + 0.55 rad; all around for steep views) and rebuild on a > 17° turn. Crowns are
+  widened up to 1.5× where the pixel's max cover is high, so 100 % closes the canopy. Beyond the trees the terrain shader
+  draws the canopy by on-screen scale: lit ~9 m crown cells where crowns are 1–12 px (share of cells = tree fraction),
+  soft understorey where the instanced trees stand, the flat ramp colour when crowns are sub-pixel. An adaptive budget
+  (`treeQ`, 0.4–1) shrinks the tree radius and the near distance when frames exceed ~26 ms and grows them back under
+  ~18 ms; `?trees=1` fixes it (tests). Measured on an M2 Pro at 1280×577: 60 fps at the 1.7 km start view (~70k trees,
+  ~2M triangles), ~47 fps with the camera in the canopy at 350 m; rebuilds 30–70 ms for up to 120k trees (per-tile
+  cached max cover, row/column window, typed-array output). Alpha-to-coverage was dropped: it left white specks at night.
+- **Camera (2026-09-29):** MapControls: left-drag pans; right-drag, Shift/Ctrl/⌘+drag or a two-finger twist rotates. A
+  control column (row on phones) adds rotate ±26°, tilt ±10°, and a compass that shows north and resets to north-up;
+  keys Q/E rotate, R/F tilt, N north. Pending turns are eased and capped, so a held key keeps a steady pace.
 - **Display rule:** when a pixel has no clear observation in a year, the app shows its last observed value (leading gaps are back-filled from the first observation) and greys/stripes it. Stored data keeps 255. Area stats in the header use this filled series over the whole tile area (the pilot rectangle, not the city boundary).
 
 ## Post-2013 rise (investigated 2026-09-27)

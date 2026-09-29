@@ -88,7 +88,12 @@
   dialog h2 { margin: 0 0 4px; font-size: 18px; } dialog h3 { margin: 16px 0 4px; font-size: 14px; }
   dialog ul { padding-left: 1.2em; margin: 4px 0; } dialog li { margin: 3px 0; }
   dialog footer { padding: 10px 22px 16px; text-align: right; border-top: 1px solid var(--line); }
+  #cam { right: 12px; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; gap: 4px; padding: 5px; border-radius: 12px; }
+  #cam button { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; }
+  #cam svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  #compass svg { width: 22px; height: 22px; transition: transform 0.05s linear; }
   @media (max-width: 640px) {
+    #cam { top: auto; transform: none; flex-direction: row; bottom: calc(232px + env(safe-area-inset-bottom, 0px)); }
     #yearLabel { font-size: 26px; } #play { width: 38px; height: 38px; }
     #credits { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
     #minimap { display: none; }
@@ -149,6 +154,14 @@
   </div>
 </section>
 
+<div id="cam" class="panel" role="group" aria-label="鏡頭" title="旋轉：右鍵拖曳、Shift＋拖曳或兩指轉動；平移：左鍵拖曳；縮放：滾輪或兩指捏合">
+  <button id="rotL" type="button" aria-label="向左旋轉" title="向左旋轉（Q）"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg></button>
+  <button id="compass" type="button" aria-label="朝北" title="朝北（N）"><svg viewBox="0 0 24 24"><path d="M12 3l3.5 9h-7z" fill="#c0392b" stroke="#c0392b"/><path d="M12 21l3.5-9h-7z" fill="#b8b8b0" stroke="#b8b8b0"/></svg></button>
+  <button id="rotR" type="button" aria-label="向右旋轉" title="向右旋轉（E）"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg></button>
+  <button id="tiltUp" type="button" aria-label="俯視" title="俯視（R）"><svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg></button>
+  <button id="tiltDn" type="button" aria-label="平視" title="平視（F）"><svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg></button>
+</div>
+
 <canvas id="minimap" class="panel" hidden title="小地圖：點一下飛過去" aria-label="小地圖"></canvas>
 
 <div class="panel" id="credits">
@@ -161,7 +174,7 @@
 <dialog id="about">
   <div class="body">
     <h2>資料與限制</h2>
-    <p>每個 30 公尺像元的樹冠比例，由 Landsat 4、5、7、8、9 衛星影像（USGS Collection 2 Level-2，Tier 1）逐年估計。畫面上的樹是示意：數量與樹冠比例成正比，不代表實際的單株樹木。</p>
+    <p>每個 30 公尺像元的樹冠比例，由 Landsat 4、5、7、8、9 衛星影像（USGS Collection 2 Level-2，Tier 1）逐年估計。畫面上的樹是示意：數量與樹冠比例成正比，不代表實際的單株樹木；樹種依海拔帶與都市環境隨機配置，樹葉由程式繪製。鏡頭附近幾公里內畫出立體的樹，更遠處的森林以地面上的樹冠紋理表現（同樣依樹冠比例）；電腦較慢時，立體樹的範圍會自動縮小以維持流暢。</p>
     <h3>怎麼算的</h3>
     <ul>
       <li>每年、每個像元取一景真實觀測（medoid 合成），因此每個數值都能追溯到單一原始影像與像元。點選地面即可查看來源影像編號。</li>
