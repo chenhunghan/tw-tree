@@ -116,6 +116,48 @@ def dn_from_reflectance(sr, s, pids):
     return dn
 
 
+def local_medoid(zone, i, j, year, sensors, pid_list, batch=24):
+    """Last resort for the densest tile-years, where even the reflectance composite exceeds Earth Engine's memory:
+    fetch the per-date mosaics' raw DN + scene index in small batches and pick the medoid here, with the same rule
+    as g.composite (per-band median over clear dates, then the date nearest to it in squared reflectance distance)."""
+    per_date, _ = g.dates_collection(g.tile_bounds_geom(zone, i, j), year, zone, sensors, with_dn=True)
+    nd = call(lambda: per_date.size().getInfo())
+    lst = per_date.toList(nd)
+    shape = (g.TILE, g.TILE)
+    dn = np.zeros((nd,) + shape + (6,), "u2")
+    s = np.full((nd,) + shape, g.NODATA_S, "u2")
+    for k in range(0, nd, batch):
+        qs = range(k, min(nd, k + batch))
+        img = ee.Image.cat([ee.Image(lst.get(q)).select(g.DN + ["s"]).unmask(g.NODATA_S).toUint16()
+                            .rename([f"d{q}_{b}" for b in g.DN + ["s"]]) for q in qs])
+        arr = pixels(img, zone, i, j)
+        for q in qs:
+            s[q] = arr[f"d{q}_s"]
+            dn[q] = np.stack([arr[f"d{q}_{b}"] for b in g.DN], -1)
+    ok = s != g.NODATA_S
+    sensor = np.array([p[:4] for p in pid_list])
+    sr = np.full(dn.shape, np.nan, "f4")
+    for key in np.unique(sensor):
+        m = ok & (sensor[np.where(ok, s, 0)] == key)
+        x = dn[m].astype("f8") * 0.0000275 - 0.2          # double arithmetic, then float32, as in prep_for
+        co = g.calibration(key)
+        if co:
+            x = x * np.array(co[0]) + np.array(co[1])
+        sr[m] = x.astype("f4")
+    with np.errstate(invalid="ignore"), __import__("warnings").catch_warnings():
+        __import__("warnings").simplefilter("ignore", RuntimeWarning)
+        med = np.nanmedian(sr.astype("f8"), axis=0)
+    d = np.nansum((sr.astype("f8") - med) ** 2, axis=-1)
+    d[~ok] = np.inf
+    best = np.argmin(d, axis=0)
+    any_ok = ok.any(0)
+    pick = lambda a: np.take_along_axis(a, best[None, ..., None] if a.ndim == 4 else best[None], 0)[0]
+    out_dn, out_s = pick(dn), pick(s)
+    out_dn[~any_ok] = 0
+    out_s[~any_ok] = g.NODATA_S
+    return {"dn": out_dn, "s": out_s, "n": ok.sum(0).astype("u1")}
+
+
 def fetch_year(cache, zone, i, j, year, sensors=None):
     out = cache / f"{year}.npz"
     if out.exists():
@@ -136,10 +178,16 @@ def fetch_year(cache, zone, i, j, year, sensors=None):
         if "memory" not in str(e).lower():
             raise
         comp, _ = g.composite(g.tile_bounds_geom(zone, i, j), year, zone, sensors=sensors)
-        arr = pixels(ee.Image.cat([comp.select(g.BANDS).unmask(-1).toFloat(),
-                                   comp.select("s").unmask(g.NODATA_S).toUint16(),
-                                   comp.select("n").unmask(0).toUint8()]), zone, i, j)
-        dn, src = dn_from_reflectance(np.stack([arr[b] for b in g.BANDS], -1), arr["s"], pid_list), "reflectance"
+        try:
+            arr = pixels(ee.Image.cat([comp.select(g.BANDS).unmask(-1).toFloat(),
+                                       comp.select("s").unmask(g.NODATA_S).toUint16(),
+                                       comp.select("n").unmask(0).toUint8()]), zone, i, j)
+            dn, src = dn_from_reflectance(np.stack([arr[b] for b in g.BANDS], -1), arr["s"], pid_list), "reflectance"
+        except Exception as e2:
+            if "memory" not in str(e2).lower():
+                raise
+            arr = local_medoid(zone, i, j, year, sensors, pid_list)
+            dn, src = arr["dn"], "local_medoid"
     np.savez_compressed(out, dn=dn, s=arr["s"], n=arr["n"], pids=np.array(pid_list), dn_source=np.array(src))
     return year, f"{len(pid_list)} scenes"
 

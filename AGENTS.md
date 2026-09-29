@@ -196,7 +196,7 @@ The v2 pilot total rose from ~54 % (2013) to ~64 % (2021) and then stayed flat. 
 - **Possible correction (not applied):** per-year relative normalisation anchored on stable-forest pixels. It is purely local
   now (raw DN + Hansen/WorldCover layers are cached per tile), so it can be tried without Earth Engine.
 
-## Island-wide build (v3, started 2026-09-27)
+## Island-wide build (v3, started 2026-09-27, complete 2026-09-29)
 - **Tiles:** `plan_tiles.py` → `tiles_taiwan.json`: 761 tiles, 36,319 km² of land (USDOS LSIB, lon ≥ 118, lat ≥ 21.8; Dongsha
   and Taiping excluded). Zone 51 owns every land tile fully inside its real Landsat 8 footprints (663 tiles, including
   Matsu on path 118/042); zone 50 takes the remaining land (98 tiles: SW plain edge 72, Penghu 13, Kinmen 13).
@@ -221,13 +221,26 @@ The v2 pilot total rose from ~54 % (2013) to ~64 % (2021) and then stayed flat. 
   the model run locally (`classify()` in `export_tiles.py`). Verified on a pilot tile: scene index identical to the v2 export
   for 100 % of pixels; local tree fraction equals Earth Engine's within 1 point (99.8–100 % exact). A model change is
   `--assemble-only --model <name>`, no Earth Engine. Cache size ~17 GB for the island.
+- **Memory-limit fallbacks** (dense years, ~90–150+ scenes per tile): if the DN request exceeds Earth Engine's user memory,
+  fetch the composite's reflectance and invert it to the exact DN; if that also fails (zone-51 2022/2023 near 23.9° N),
+  `local_medoid` fetches the per-date mosaics' DN + `s` in batches of 24 dates and picks the medoid locally with the same
+  rule. Checked against Earth Engine on 40- and 122-scene tile-years: `s`, DN and `n` identical for 100 % of pixels.
+  `dn_source` in each year's npz records which path was used (`ee`, `reflectance`, `local_medoid`).
 - **Model:** `train_rf.py` on island-wide samples (stratified tree bin × elevation band, 3 per stratum per tile, 22,048
   points, 3 km block hold-out). Island-wide held-out agreement with WorldCover 2021 is lower than the northern v2 figure:
   R² ≈ 0.45, MAE ≈ 21 points (the sample includes many mountain grassland/bamboo pixels; the v2 northern sample scored 0.57 on
   this sample design vs 0.71 on its own). The EE tree strings round-trip exactly (local parser vs sklearn: 3e-16).
 - **Verified v3 (2026-09-27, first 8 tiles, 60 pixels):** 60/60 integer positions, 60/60 clear; raw DN identical to
   Planetary Computer in 59/59 same-processing cases (one L9 scene is a 2023 USGS reprocessing in EE vs the 2022 processing
-  on PC); tree fraction 59/60 exact, 1 off by 1. Two products are missing on PC and are skipped. `build/verify_taiwan.json`.
+  on PC); tree fraction 59/60 exact, 1 off by 1. Two products are missing on PC and are skipped (that file was later overwritten by the complete-release check below).
+- **Complete (2026-09-29 05:21):** 761/761 tiles published to `taiwan/` (`complete: true`); first pass 29,799 requests with 40
+  memory-limit failures, the retry pass 1,204 requests with 0. Fetch paths: 31,755 tile-years `ee`, 173 `reflectance`,
+  34 `local_medoid`. Gap-filled land tree area: 65.2 % (1987–98), 65.7 % (2000–12), 70.0 % (2014–21), 72.4 % (2022–26) of
+  3.57 M ha; 2022 alone 75.3 %.
+- **Verified complete v3 (2026-09-29):** 60 random pixels: 60/60 integer positions and clear, DN identical in 59/59
+  same-processing cases, tree fraction 60/60 exact (`build/verify_taiwan.json`). 20 pixels from `local_medoid` tile-years
+  (`verify_provenance.py taiwan 20 local_medoid`): 20/20 positions and clear, DN 19/19, tree fraction 20/20 exact, 5 products
+  missing on PC skipped (`build/verify_taiwan_local_medoid.json`).
 - **Unattended run:** `pipeline/island_loop.sh` keeps the export running and assembles + publishes `taiwan/` to Hugging Face
   every 3 h; it stops after the final publish. The app reads `taiwan/` once it has ≥ 150 tiles (or is complete) and falls
   back to `pilot/` before that; `?data=` overrides.

@@ -170,6 +170,20 @@ def composite(region, year, zone, sensors=None, with_dn=False):
     Every band shares one mask, so the chosen reflectance and scene index always come from the same scene.
     with_dn: the image also has DN (raw digital numbers of the chosen observation).
     """
+    per_date, pids = dates_collection(region, year, zone, sensors, with_dn)
+    med = per_date.select(BANDS).median()
+
+    def score(img):
+        d = img.select(BANDS).subtract(med).pow(2).reduce(ee.Reducer.sum())
+        return img.addBands(d.multiply(-1).rename("q"))
+
+    best = per_date.map(score).qualityMosaic("q")
+    n = per_date.select("red").count().rename("n")
+    return best.select(BANDS + (DN if with_dn else []) + ["s"]).addBands(n), pids
+
+
+def dates_collection(region, year, zone, sensors=None, with_dn=False):
+    """The medoid's input: one image per acquisition date (same-date WRS rows mosaicked), with BANDS, DN, 's'."""
     pids = scenes(region, year, zone).aggregate_array("LANDSAT_PRODUCT_ID")
 
     def tagger(prep):
@@ -189,15 +203,7 @@ def composite(region, year, zone, sensors=None, with_dn=False):
     dates = tagged.aggregate_array("DATE_ACQUIRED").distinct()
     per_date = ee.ImageCollection(dates.map(
         lambda d: tagged.filter(ee.Filter.eq("DATE_ACQUIRED", d)).mosaic()))
-    med = per_date.select(BANDS).median()
-
-    def score(img):
-        d = img.select(BANDS).subtract(med).pow(2).reduce(ee.Reducer.sum())
-        return img.addBands(d.multiply(-1).rename("q"))
-
-    best = per_date.map(score).qualityMosaic("q")
-    n = per_date.select("red").count().rename("n")
-    return best.select(BANDS + (DN if with_dn else []) + ["s"]).addBands(n), pids
+    return per_date, pids
 
 
 def features(img):

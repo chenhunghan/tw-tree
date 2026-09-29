@@ -12,6 +12,7 @@ compare with the stored tree fraction. For raw-DN exports (v3) the six DN read f
 compared with the DN Earth Engine returned (build/cache), which must be identical integers.
 
   uv run verify_provenance.py pilot 60
+  uv run verify_provenance.py taiwan 20 local_medoid     # only tile-years fetched by that path (dn_source in the cache)
 """
 import gzip, json, pathlib, random, re, sys
 import numpy as np, pyarrow.ipc as ipc, rasterio, pystac_client, planetary_computer
@@ -59,7 +60,7 @@ def load(path):
     return ipc.open_file(gzip.open(path).read()).read_all()
 
 
-def main(name, n):
+def main(name, n, source=None):
     idx = json.loads((ROOT / "site" / "data" / name / "index.json").read_text())
     model = json.loads((ROOT / "pipeline" / "model" / f"{idx['model']['name']}.json").read_text())
     trees = [parse_tree(t) for t in model["trees"]]
@@ -67,14 +68,21 @@ def main(name, n):
                                     modifier=planetary_computer.sign_inplace)
     rnd = random.Random(7)
     results, missing = [], []
+    pairs = None
+    if source:                                   # (tile, year) pairs whose cached DN came from this fetch path
+        cache_dir = ROOT / "build" / "cache" / name
+        pairs = [(t, yr) for t in idx["tiles"] for yr in idx["years"]
+                 if (f := cache_dir / str(t["zone"]) / f"{t['i']}_{t['j']}" / f"{yr}.npz").exists()
+                 and str(np.load(f).get("dn_source", "ee")) == source]
+        print(f"{len(pairs)} tile-years with dn_source={source}", flush=True)
     while len(results) < n:
-        t = rnd.choice(idx["tiles"])
+        t, yr = rnd.choice(pairs) if pairs else (rnd.choice(idx["tiles"]), None)
         frac = load(ROOT / "site" / "data" / name / t["frac"])
         prov = load(ROOT / "site" / "data" / name / t["prov"])
         pmeta = json.loads(prov.schema.metadata[b"tpetree"])
         scenes = pmeta["scenes"]
         calib = pmeta.get("calibration") or {k: None if k in ("LC08", "LC09") else (ROY_SLOPE.tolist(), ROY_INTERCEPT.tolist()) for k in ("LT04", "LT05", "LE07", "LC08", "LC09")}
-        yr = rnd.choice(idx["years"])
+        yr = yr or rnd.choice(idx["years"])
         s = prov[f"s{yr}"].to_numpy()
         cand = np.flatnonzero(s != 65535)
         if not len(cand):
@@ -120,10 +128,10 @@ def main(name, n):
                "different_processing_version": [r["product"] + " vs PC " + r["pc_product"] for r in results if not r["same_processing"]],
                "skipped_not_on_planetary_computer": missing}
     print(json.dumps(summary, indent=1))
-    out = ROOT / "build" / f"verify_{name}.json"
+    out = ROOT / "build" / (f"verify_{name}_{source}.json" if source else f"verify_{name}.json")
     out.write_text(json.dumps({"summary": summary, "results": results}, indent=1))
     print("saved", out)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 40)
+    main(sys.argv[1], int(sys.argv[2]) if len(sys.argv) > 2 else 40, sys.argv[3] if len(sys.argv) > 3 else None)

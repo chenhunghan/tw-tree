@@ -20,9 +20,8 @@ Tree fraction (0–100 %) per 30 m Landsat pixel for each year, with per-pixel p
 Landsat scene each value came from. Data for the 3D viewer 臺灣樹冠時光機 (<https://chenhunghan.github.io/tw-tree/>).
 
 Releases:
-- **`taiwan/` — island-wide v3 (in progress).** 761 tiles in UTM zones 51 and 50 covering the main island, Penghu, Kinmen
-  and Matsu (36,319 km² of land). Tiles are published north to south as the export completes; `index.json` has
-  `complete` and `tiles_planned`. Code: <https://github.com/chenhunghan/tw-tree>.
+- **`taiwan/` — island-wide v3 (complete, 2026-09-29).** 761 tiles in UTM zones 51 and 50 covering the main island, Penghu,
+  Kinmen and Matsu (36,319 km² of land; 3.57 M ha of land pixels after the water mask). Code: <https://github.com/chenhunghan/tw-tree>.
 - **`pilot/` — Taipei pilot v2** (20 tiles in zone 51, sensor-calibrated). Kept unchanged.
 
 ## Layout (`taiwan/` adds `own`, `land` and `overview.arrow.gz`)
@@ -75,7 +74,18 @@ df = pl.from_arrow(t)            # one row per pixel, one column per year
 ## Verification
 
 **`taiwan/` (v3):** Earth Engine returns the raw Collection 2 DN of each pixel's medoid observation; calibration, features and
-the model run locally. On 60 random stored pixels, the position formula gave an integer raw pixel in 60/60 and the pixel
+the model run locally. For the densest tile-years (2022–2023 around 23.9° N, up to ~150 scenes), Earth Engine ran out of
+memory, so 173 tile-years were fetched as reflectance and inverted to the identical DN, and 34 had their medoid picked
+locally from the per-date raw DN (checked against Earth Engine on 40- and 122-scene tile-years: scene index, DN and date
+count identical for 100 % of pixels). `dn_source` in the build cache records the path.
+
+Complete island release (2026-09-29): 60 random stored pixels gave an integer raw pixel in 60/60, clear in QA_PIXEL in
+60/60, raw DN identical to Planetary Computer in 59/59 same-processing cases (the 60th is a 2023 USGS reprocessing), and
+the recomputed tree fraction matched **60/60 exactly**. A further 20 pixels drawn only from the locally picked tile-years:
+20/20 integer positions and clear, DN identical in 19/19 same-processing cases, tree fraction 20/20 exact (5 products
+not mirrored on Planetary Computer were skipped).
+
+First 8 tiles (2026-09-27): on 60 random stored pixels, the position formula gave an integer raw pixel in 60/60 and the pixel
 was clear in QA_PIXEL in 60/60. The six raw DN read from the independent Planetary Computer copy were **identical** to the
 DN Earth Engine returned in 59/59 cases with the same processing version (the 60th is a Landsat 9 scene USGS reprocessed in
 2023; Planetary Computer serves the 2022 processing). Recomputed tree fraction: 59/60 exact, 1 off by 1 point (that
@@ -123,6 +133,10 @@ pixels, local tree fraction within 1 point of Earth Engine's (99.8–100 % exact
 > composites) and has **not been independently verified**.
 
 
+- **Island totals (`taiwan/`, gap-filled land tree area):** mean 2.33 M ha (65.2 % of land) for 1987–98, 2.35 M ha (65.7 %)
+  for 2000–12, 2.50 M ha (70.0 %) for 2014–21 and 2.58 M ha (72.4 %) for 2022–26. 2022 is a single-year high (2.69 M ha,
+  75.3 %) between 2.51 M ha in 2021 and 2023. The post-2013 increase is largely the measurement drift described above, not
+  verified canopy gain; 1984 and 1986 have few scenes and rely on gap filling.
 - No Tier-1 scenes over Taipei in 1982, 1983 or 1985. 1984 and 1986 have only 3 scenes each (low confidence).
 - Raw geolocation is about 12 m RMSE, so there can be sub-pixel shifts between years.
 - Same-year residual differences between sensors after calibration are within about ±3 points in a given year. Landsat 7 has SLC-off gaps from 2003.
