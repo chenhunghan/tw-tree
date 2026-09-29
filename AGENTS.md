@@ -111,6 +111,8 @@ A GitHub Pages site. It shows tree cover as procedural three.js trees on custom 
   - `provenance` tile columns: `x_utm`, `y_utm`, `s1984…s2026` (uint16 index into that tile's per-year scene-ID list, stored in the schema metadata under `scenes`; 65535 = none) and `n1984…n2026` (uint8, distinct clear acquisition dates).
   - Summaries in **Parquet only** (no CSV).
   - Tracing a value to its raw pixel: `col = (x_utm − 15 − scene_ulx) / 30`, `row = (scene_uly − y_utm − 15) / 30`.
+- **Local copies:** `site/data/` is not kept locally (deleted 2026-09-29 to save disk; every file was on HF). Rebuild it with
+  `export_tiles.py --assemble-only` from `build/cache/` before local `?data=` testing or a publish.
 - **Hosting:** site on GitHub Pages. Data tiles on a public **Hugging Face dataset** (anonymous browser reads, CORS verified). Uploads use a fine-grained token scoped to that repo only (`hf auth login` locally, the `HF_TOKEN` secret in CI); never commit a token.
 - **App:** plain HTML + ES modules + three.js from a CDN importmap (pattern: `~/lns-lab`), with no build step and no external model/texture assets; all geometry is procedural.
   - The basemap is fully custom: terrain from elevation, shaded by land/water/tree fraction.
@@ -166,7 +168,7 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   - Rejected: the fitted ETM+→OLI line (visible-band r 0.37–0.52; noise-driven slopes of 1.6–2.1) and the L9→L8 fit.
   - After the fix, TM vs ETM+ is −0.4 points on average. The model was retrained on LC08 only (`rf_z51_2021_oli`, R² 0.714).
   - Coefficients and decisions: `pipeline/model/sensor_calibration.json`. Tile metadata records `harmonisation` and the per-sensor `calibration`.
-  - `gee_common.HARMONISATION` defaults to "calibrated" when that file exists; `set_harmonisation("roy")` reproduces v1. The v1 release is kept in `build/releases/pilot_v1`.
+  - `gee_common.HARMONISATION` defaults to "calibrated" when that file exists; `set_harmonisation("roy")` reproduces v1. The v1 release's `index.json` and `summary.parquet` are kept in `build/releases/pilot_v1` (tiles deleted 2026-09-29; rebuild with `set_harmonisation("roy")`).
 - **Earth Engine stalls:** interactive requests occasionally hang indefinitely (one waited over 70 minutes with no CPU). `gee_common.init()` sets `ee.data.setDeadline(300000)`, so a stall fails after 5 minutes and is retried.
 - **App look (2026-09-28):** logarithmic depth buffer (the view spans 5 m–900 km; without it water z-fought the sea plane
   and flickered while zooming). Water uses one shader for terrain water pixels and the sea (ripples that fade with
@@ -237,7 +239,7 @@ The v2 pilot total rose from ~54 % (2013) to ~64 % (2021) and then stayed flat. 
   normalisation removes it (r 0.13), and per-tile agreement with Dynamic World drops (tile anomalies with each year's island mean
   removed: r 0.35 → 0.27). A variant that keeps year-to-year variation (5-year temporal median of the params) kept the 2022 spike; chosen:
   the annual correction, for trends and a steadier timeline. Variants and scores: `build/diag/`.
-- **Published:** `taiwan/` is normalised; the previous values are `taiwan_raw/` on Hugging Face (and `build/releases/taiwan_v3_raw`).
+- **Published:** `taiwan/` is normalised; the previous values are `taiwan_raw/` on Hugging Face (`build/releases/taiwan_v3_raw` keeps only its `index.json` and verify files).
   `export_tiles.py --normalisation none` rebuilds raw.
 
 ## Island-wide build (v3, started 2026-09-27, complete 2026-09-29)
