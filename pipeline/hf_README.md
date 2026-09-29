@@ -26,6 +26,9 @@ Releases:
 - **`taiwan_raw/` — the same release without the normalisation** (the first complete v3 publish). Provenance tiles are
   byte-identical to `taiwan/`; only `f<year>`, the overview and the totals differ.
 - **`pilot/` — Taipei pilot v2** (20 tiles in zone 51, sensor-calibrated). Kept unchanged.
+- **`cache/taiwan/` — the raw inputs behind `taiwan/` and `taiwan_raw/`** (~20 GB): for every tile and year, the raw
+  Landsat Collection 2 Level-2 digital numbers of the chosen (medoid) observation as fetched from Earth Engine, plus the
+  static layers. With it the tiles can be rebuilt, or a different model or normalisation applied, without Earth Engine.
 
 ## Layout (`taiwan/` adds `own`, `land` and `overview.arrow.gz`)
 
@@ -74,6 +77,32 @@ Tiles are 256 × 256 pixels. Tile `(i, j)` covers x ∈ [15 + 7680·i, 15 + 7680
 import gzip, pyarrow.ipc as ipc, polars as pl
 t = ipc.open_file(gzip.open("pilot/51/46_360.frac.arrow.gz").read()).read_all()
 df = pl.from_arrow(t)            # one row per pixel, one column per year
+```
+
+## Raw input cache (`cache/taiwan/`)
+
+```
+cache/taiwan/manifest.json         parts: tiles, file count, bytes and SHA-256 of each tar
+cache/taiwan/<zone>/part-NNN.tar   ~500 MB each, whole tiles; members taiwan/<zone>/<i>_<j>/{static,<year>}.npz
+cache/taiwan/scene_counts.json     scenes per zone and year
+cache/taiwan/failures_pass1.json   tile-years that hit Earth Engine's memory limit on the first pass (all refetched)
+```
+
+Each `.npz` is NumPy `savez_compressed`; arrays are 256 × 256 on the tile's native grid, north-up, row 0 at the top edge
+(pixel centre `x = 30 + 7680·i + 30·col`, `y = 7680·(j+1) − 30·row`).
+
+- `<year>.npz`: `dn` (uint16, 256 × 256 × 6: blue, green, red, nir, swir1, swir2 Collection 2 Level-2 DN of the medoid
+  observation; 0 = none), `s` (uint16 index into `pids`, 65535 = none), `n` (uint8 clear dates), `pids` (Landsat product
+  IDs), and in some years `dn_source` (`ee`, `reflectance` or `local_medoid`: how the DN were obtained, see Method).
+- `static.npz`: `z` (int16 m, Copernicus DEM GLO-30), `water` and `wc` (uint8 % permanent water and tree cover, ESA
+  WorldCover 2021), `tc2000` and `loss` (Hansen GFC tree cover 2000 % and loss year − 2000), `built`, `bh`, `bs` (as in the
+  frac tiles).
+
+Restore into `build/cache/taiwan/` (downloads each part, checks its SHA-256, extracts):
+
+```
+uv run pipeline/archive_cache.py restore chenhunghan/tw-tree taiwan
+uv run pipeline/export_tiles.py --plan tiles_taiwan.json --name taiwan --assemble-only   # rebuild the tiles
 ```
 
 ## Verification

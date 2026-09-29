@@ -113,6 +113,15 @@ A GitHub Pages site. It shows tree cover as procedural three.js trees on custom 
   - Tracing a value to its raw pixel: `col = (x_utm − 15 − scene_ulx) / 30`, `row = (scene_uly − y_utm − 15) / 30`.
 - **Local copies:** `site/data/` is not kept locally (deleted 2026-09-29 to save disk; every file was on HF). Rebuild it with
   `export_tiles.py --assemble-only` from `build/cache/` before local `?data=` testing or a publish.
+- **Raw-DN cache on HF (2026-09-30):** `build/cache/taiwan/` (~20 GB) is archived to the public dataset as
+  `cache/taiwan/<zone>/part-NNN.tar` (40 parts of ~500 MB, whole tiles) + `manifest.json` (tiles, files, bytes, SHA-256 per
+  part; lists verified parts only) by `uv run pipeline/archive_cache.py archive chenhunghan/tw-tree taiwan --delete`. Each part
+  is checked member by member against the source, uploaded, downloaded back and hash-compared before its tiles are deleted
+  locally; network errors, 429 and 5xx are retried with backoff (up to ~1 h), downloads resume with Range. Progress:
+  `build/archive_taiwan.json`, log `build/archive_taiwan.log`. Restore before any `--assemble-only`, normalisation or
+  analysis run: `uv run pipeline/archive_cache.py restore chenhunghan/tw-tree taiwan` (checks SHA-256, extracts into
+  `build/cache/`). All sources in the cache (USGS Landsat, Copernicus DEM, WorldCover, Hansen, GISA, GHSL) allow
+  redistribution with the attribution already on the card.
 - **Hosting:** site on GitHub Pages. Data tiles on a public **Hugging Face dataset** (anonymous browser reads, CORS verified). Uploads use a fine-grained token scoped to that repo only (`hf auth login` locally, the `HF_TOKEN` secret in CI); never commit a token.
 - **App:** plain HTML + ES modules + three.js from a CDN importmap (pattern: `~/lns-lab`), with no build step and no external model/texture assets; all geometry is procedural.
   - The basemap is fully custom: terrain from elevation, shaded by land/water/tree fraction.
