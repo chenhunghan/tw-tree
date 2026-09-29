@@ -13,7 +13,8 @@ numbers of the chosen observation (6 bands, uint16), s (scene index, uint16) and
 it returns static layers (elevation, WorldCover 2021 tree fraction, Hansen tree cover 2000 and loss). Responses are
 cached under build/cache so an interrupted run resumes; failed requests are logged and retried on the next run.
 
-Everything after the medoid choice is local: DN -> reflectance -> sensor calibration -> features -> model -> f. So a new
+Everything after the medoid choice is local: DN -> reflectance -> sensor calibration -> per tile-year normalisation
+(normalise.py; model/normalisation_<name>.json when present) -> features -> model -> f. So a new
 model or correction never needs Earth Engine again; `--assemble-only --model <name>` rebuilds the tiles.
 The assembled tiles are written to site/data/<name>/<zone>/<i>_<j>.{frac,prov}.arrow.gz, plus index.json,
 summary.parquet and overview.arrow.gz (480 m block means for the zoomed-out view).
@@ -24,7 +25,7 @@ pixels whose location is also inside a zone-51 tile (zone 51 takes precedence), 
 import argparse, concurrent.futures as cf, datetime, gzip, io, json, pathlib, threading, time
 import ee, joblib, numpy as np, pyarrow as pa, pyarrow.ipc as ipc, pyarrow.parquet as pq
 from pyproj import Transformer
-import gee_common as g
+import gee_common as g, normalise as N
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 ATTRIBUTION = ("Landsat Collection 2 Level-2 courtesy of the U.S. Geological Survey; "
@@ -204,8 +205,9 @@ def fetch_static(cache, zone, i, j):
     return "static"
 
 
-def classify(d, rf):
-    """Cached DN composite for one tile-year -> tree fraction % (uint8, 255 = no data)."""
+def classify(d, rf, norm=None):
+    """Cached DN composite for one tile-year -> tree fraction % (uint8, 255 = no data).
+    norm: this tile-year's normalisation [gain x6, offset x6] (normalise.py), applied to the calibrated reflectance."""
     s, dn, pids = d["s"].ravel(), d["dn"].reshape(-1, 6), d["pids"]
     f = np.full(s.size, g.NODATA_F, "u1")
     ok = s != g.NODATA_S
@@ -215,7 +217,8 @@ def classify(d, rf):
     X = np.empty((ok.sum(), len(g.FEATURES)), np.float32)
     for key in np.unique(sensor):
         m = sensor == key
-        X[m] = g.features_np(g.reflectance_np(dn[ok][m], key))
+        sr = g.reflectance_np(dn[ok][m], key)
+        X[m] = g.features_np(sr if norm is None else N.apply(sr, norm))
     X = np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
     f[ok] = np.clip(np.round(np.clip(rf.predict(X), 0, 1) * 100), 0, 100).astype("u1")
     return f
@@ -284,7 +287,8 @@ def overview(zone, i, j, z, own, land, fcols, years, ctx):
     return cols
 
 
-def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
+def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles, norm=None):
+    """norm: None, or {"info": {...}, "params": {year: [gain x6, offset x6]}} for this tile."""
     x, y = g.pixel_centres(zone, i, j)
     st = np.load(cache / "static.npz")
     z = st["z"].ravel().astype("int16")
@@ -294,7 +298,7 @@ def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
     fcols, scols, ncols, scenes, stats = {}, {}, {}, {}, []
     for yr in years:
         d = np.load(cache / f"{yr}.npz")
-        fcols[f"f{yr}"] = classify(d, rf)
+        fcols[f"f{yr}"] = classify(d, rf, norm["params"].get(yr) if norm else None)
         scols[f"s{yr}"] = d["s"].ravel().astype("uint16")
         ncols[f"n{yr}"] = d["n"].ravel().astype("uint8")
         scenes[str(yr)] = [str(p) for p in d["pids"]]
@@ -326,8 +330,13 @@ def assemble(cache, outdir, zone, i, j, years, model, rf, zone51_tiles):
         "generated": datetime.date.today().isoformat(), "attribution": ATTRIBUTION,
     }
     ctx = {k: st[k].ravel().astype("u1") for k in ("built", "bh", "bs")}
+    frac_meta = dict(meta)
+    if norm:      # frac metadata only, so the provenance tiles stay byte-identical
+        frac_meta["normalisation"] = dict(norm["info"], params={str(y): p for y, p in sorted(norm["params"].items())})
+        frac_meta["f"] = ("tree fraction percent 0-100: model applied to the calibrated, normalised (sr * gain + offset, "
+                          "params below per year) raw DN of the medoid observation; 255 = no data")
     frac = pa.table({"x_utm": x, "y_utm": y, "z_m": z, "own": own, "land": land, **ctx, **fcols},
-                    metadata={"tpetree": json.dumps(meta, ensure_ascii=False)})
+                    metadata={"tpetree": json.dumps(frac_meta, ensure_ascii=False)})
     prov_meta = dict(meta, s="index into scenes[year] (Landsat product IDs); 65535 = none",
                      n="distinct clear acquisition dates in the year",
                      trace="col=(x_utm-15-scene_ulx)/30, row=(scene_uly-y_utm-15)/30", scenes=scenes)
@@ -348,8 +357,8 @@ def _init_worker(name):
 
 
 def _assemble_job(job):
-    cache, outdir, z, i, j, years, model_name, zone51_tiles = job
-    return (z, i, j), assemble(cache, outdir, z, i, j, years, {"name": model_name}, _RF, zone51_tiles)
+    cache, outdir, z, i, j, years, model_name, zone51_tiles, norm = job
+    return (z, i, j), assemble(cache, outdir, z, i, j, years, {"name": model_name}, _RF, zone51_tiles, norm)
 
 
 def tile_complete(cache, years):
@@ -371,6 +380,8 @@ def main():
     ap.add_argument("--outroot", default=str(ROOT / "site" / "data"), help="parent folder of the <name> output")
     ap.add_argument("--assemble-only", action="store_true", help="skip Earth Engine; write the tiles already complete")
     ap.add_argument("--max-consecutive-failures", type=int, default=25)
+    ap.add_argument("--normalisation", help="per tile-year normalisation JSON (normalise.py); default "
+                    "model/normalisation_<name>.json if it exists; 'none' to disable")
     ap.add_argument("--assemble-workers", type=int, default=6, help="local processes for classification/assembly")
     a = ap.parse_args()
 
@@ -453,7 +464,18 @@ def main():
     if not ready:
         print("no complete tiles yet"); return
     model, _ = load_model(a.model)          # checks the joblib forest against the published tree strings
-    jobs = [(cache_of(z, i, j), outroot / str(z), z, i, j, years, a.model, zone51_tiles) for (z, i, j) in ready]
+    npath = (None if a.normalisation == "none" else pathlib.Path(a.normalisation) if a.normalisation
+             else ROOT / "pipeline" / "model" / f"normalisation_{a.name}.json")
+    nd = N.load(npath) if npath and npath.exists() else None
+    ninfo = None
+    if nd:
+        ninfo = {"file": npath.name, "mode": nd["mode"], "reference_year": nd["reference_year"],
+                 "apply": "sr_normalised = sr * gain + offset per band (blue green red nir swir1 swir2), after sensor calibration",
+                 "params_layout": nd["params_layout"]}
+        print(f"normalisation: {npath.name} ({nd['mode']}, reference {nd['reference_year']})", flush=True)
+    tile_norm = lambda z, i, j: dict(info=ninfo, params=nd["params"][f"{z}_{i}_{j}"]) if nd else None
+    jobs = [(cache_of(z, i, j), outroot / str(z), z, i, j, years, a.model, zone51_tiles, tile_norm(z, i, j))
+            for (z, i, j) in ready]
     with cf.ProcessPoolExecutor(a.assemble_workers, initializer=_init_worker, initargs=(a.model,)) as ex:
         done = {key: res for key, res in ex.map(_assemble_job, jobs, chunksize=4)}
     for (z, i, j) in ready:
@@ -488,6 +510,8 @@ def main():
         "scenes_per_year_zone": {str(z): {str(y): counts[z][str(y)] for y in years} for z in zones},
         "model": {k: model.get(k) for k in ("name", "target", "training_year", "training_sensors", "metrics_vs_worldcover_holdout")},
         "harmonisation": g.HARMONISATION, "sensors": a.sensors or "all",
+        "normalisation": ninfo and dict(ninfo, identity_tiles=len(nd["identity_tile_years"]),
+                                        identity_tile_years=sum(map(len, nd["identity_tile_years"].values()))),
         "complete": len(ready) == len(tiles), "tiles_planned": len(tiles),
         "totals": totals, "tiles": index_tiles, "attribution": ATTRIBUTION,
     }, ensure_ascii=False, indent=1))

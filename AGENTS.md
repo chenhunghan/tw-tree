@@ -132,9 +132,12 @@ pipeline/                 Python, run with `uv run <script>` (dependencies decla
   train_model.py          v1/v2 trainer (EE smileRandomForest, northern Taiwan, one year)
   export_tiles.py         per tile x year computePixels of the medoid's raw DN + scene index -> build/cache (resumable),
                           then local classification -> site/data/<name>/...; --plan for multi-zone, --assemble-only
+  normalise.py            per tile-year relative normalisation on stable forest + stable open land anchors
+                          -> model/normalisation_<name>.json (applied by export_tiles.py when present)
   verify_provenance.py    independent check: stored pixel -> raw USGS file on Planetary Computer -> recompute
   analysis/               diagnostics for the post-2013 rise (decompose_cache, where_rise, season_forest,
-                          forest_signal, drift_by_region) and wrs_zones
+                          forest_signal, drift_by_region), wrs_zones, and the normalisation inputs/checks
+                          (anchor_stats, eval_normalisation, dw_tiles)
 site/                     static app (GitHub Pages root); open with `python3 -m http.server` in site/
   index.html              layout + about/limitations dialog (zh-TW)
   js/app.js               scene, timeline autoplay/scrub, tree LOD, picking/info panel, search, `window.__app` test hook
@@ -193,8 +196,34 @@ The v2 pilot total rose from ~54 % (2013) to ~64 % (2021) and then stayed flat. 
   (residual haze, season mix of the medoid dates) that the model reads as tree fraction. Treat regional trends smaller than
   ~8 points in the north after 2013 as unreliable. A step of +3–4 points island-wide appears in 2022 and 2024–25 (L7 leaving,
   L9 arriving, more clear dates).
-- **Possible correction (not applied):** per-year relative normalisation anchored on stable-forest pixels. It is purely local
-  now (raw DN + Hansen/WorldCover layers are cached per tile), so it can be tried without Earth Engine.
+- **Correction applied (2026-09-29):** see "Normalisation" below.
+
+## Normalisation (applied 2026-09-29)
+- **Island-wide picture** (`analysis/anchor_stats.py`, all 761 tiles from the raw-DN cache): stable closed forest reads
+  80 % (1987–98) → 83 % → 88 % → 91 % (2022–26), steeper in the north but present everywhere. Its median red falls from
+  0.029–0.033 (TM) to 0.020–0.023 after 2018 and SWIR1 from ~0.150 to ~0.135; winter-heavy medoid years (1988, 2010, 2014)
+  have low NIR.
+- **Forest-only correction rejected.** Mapping each tile-year's stable-forest medians onto 2021 (offset, gain or mixed)
+  flattens stable forest but pushes the same shift onto every other surface: stable open land (flat in raw, ~41 %) falls to
+  34 %, partial forest (flat, ~57 %) to 52 %. The forest darkening is at least partly forest-specific, not atmospheric.
+- **Applied: two anchors** (`normalise.py --mode two --sigma 3 --radius 8`). Per tile-year and band, the line
+  `sr' = gain·sr + offset` through the stable-forest and stable-open-land (Hansen 2000 and WorldCover < 10 %, never built)
+  medians maps both onto the tile's 2021 medians; where the two medians are < 0.02 apart the gain is 1 (mean offset), and
+  gains are clipped to 0.67–1.5. Medians are smoothed within each UTM zone (Gaussian σ 3 tiles ≈ 23 km, radius 8 tiles);
+  a tile-year with too little anchor weight uses a wide neighbourhood (σ 5, radius 12; 497 tile-years), otherwise identity
+  (1,619 tile-years in 47 tiles: Penghu, Kinmen, Matsu and a few islet/coast tiles). Parameters are in
+  `pipeline/model/normalisation_taiwan.json` and in each frac tile's metadata (`normalisation.params[year]`); provenance
+  tiles are unchanged.
+- **Checks** (`analysis/eval_normalisation.py`, 4,000 sampled land pixels per tile; 1987–98 → 2022–26):
+  - all land 62.4 → 69.6 raw vs 63.8 → 66.5; mean |year-to-year| change 1.71 → 0.79 points; 2021 → 2022: 67.5 → 72.4 raw vs 67.5 → 67.8.
+  - stable forest 80 → 91 raw vs 84 → 88; partial forest (not fitted) 57 → 57 vs 57 → 54; long-built 18 → 11 vs 17 → 11.
+  - Dynamic World (`analysis/dw_tiles.py`, 2016–2025 tile means): island slope +0.04 points/yr; raw +0.39, normalised +0.08.
+- **Trade-off:** raw's year-to-year island signal tracks Dynamic World's in direction (r 0.83, but ~5× larger); the
+  normalisation removes it (r 0.13), and per-tile agreement with Dynamic World drops (tile anomalies with each year's island mean
+  removed: r 0.35 → 0.27). A variant that keeps year-to-year variation (5-year temporal median of the params) kept the 2022 spike; chosen:
+  the annual correction, for trends and a steadier timeline. Variants and scores: `build/diag/`.
+- **Published:** `taiwan/` is normalised; the previous values are `taiwan_raw/` on Hugging Face (and `build/releases/taiwan_v3_raw`).
+  `export_tiles.py --normalisation none` rebuilds raw.
 
 ## Island-wide build (v3, started 2026-09-27, complete 2026-09-29)
 - **Tiles:** `plan_tiles.py` → `tiles_taiwan.json`: 761 tiles, 36,319 km² of land (USDOS LSIB, lon ≥ 118, lat ≥ 21.8; Dongsha
@@ -235,12 +264,17 @@ The v2 pilot total rose from ~54 % (2013) to ~64 % (2021) and then stayed flat. 
   on PC); tree fraction 59/60 exact, 1 off by 1. Two products are missing on PC and are skipped (that file was later overwritten by the complete-release check below).
 - **Complete (2026-09-29 05:21):** 761/761 tiles published to `taiwan/` (`complete: true`); first pass 29,799 requests with 40
   memory-limit failures, the retry pass 1,204 requests with 0. Fetch paths: 31,755 tile-years `ee`, 173 `reflectance`,
-  34 `local_medoid`. Gap-filled land tree area: 65.2 % (1987–98), 65.7 % (2000–12), 70.0 % (2014–21), 72.4 % (2022–26) of
-  3.57 M ha; 2022 alone 75.3 %.
+  34 `local_medoid`. Gap-filled land tree area before normalisation (now `taiwan_raw/`): 65.2 % (1987–98), 65.7 % (2000–12),
+  70.0 % (2014–21), 72.4 % (2022–26) of 3.57 M ha; 2022 alone 75.3 %. Normalised (`taiwan/`): 66.7 %, 68.3 %, 69.1 %, 69.3 %;
+  2021 70.3 %, 2022 70.5 %.
 - **Verified complete v3 (2026-09-29):** 60 random pixels: 60/60 integer positions and clear, DN identical in 59/59
   same-processing cases, tree fraction 60/60 exact (`build/verify_taiwan.json`). 20 pixels from `local_medoid` tile-years
   (`verify_provenance.py taiwan 20 local_medoid`): 20/20 positions and clear, DN 19/19, tree fraction 20/20 exact, 5 products
-  missing on PC skipped (`build/verify_taiwan_local_medoid.json`).
+  missing on PC skipped (`build/verify_taiwan_local_medoid.json`). Both files for the raw release are kept in
+  `build/releases/taiwan_v3_raw/`.
+- **Verified normalised v3 (2026-09-29):** 60 random pixels, normalisation applied from the frac metadata: 60/60 integer
+  positions and clear, DN identical in 59/59 same-processing cases, tree fraction 59/60 exact; the 60th (1 point) is the
+  2023-reprocessed LC09 scene whose DN differ on PC (`build/verify_taiwan.json`).
 - **Unattended run:** `pipeline/island_loop.sh` keeps the export running and assembles + publishes `taiwan/` to Hugging Face
   every 3 h; it stops after the final publish. The app reads `taiwan/` once it has ≥ 150 tiles (or is complete) and falls
   back to `pilot/` before that; `?data=` overrides.
@@ -259,5 +293,8 @@ The v2 pilot total rose from ~54 % (2013) to ~64 % (2021) and then stayed flat. 
 - **Elevation:** `z_m` is resampled from Copernicus DEM GLO-30. It is for display only and is not a measured value on our grid.
 - **Address search:** OSM's Taiwan address coverage is uneven. House numbers often don't resolve, so the search falls back to road, village or district level and tells the user the precision it reached.
 - **Model coverage:** the island model is trained on both zones and all elevation bands, but it agrees with WorldCover less well in the mountains (grassland, dwarf bamboo vs forest) than in the lowlands.
-- **Northern drift:** after 2013, northern Taiwan's composites drift toward "more tree" on stable forest (~8 points by 2021); see "Post-2013 rise".
+- **Drift (normalised):** stable-forest reflectance drifted over time (most in the north after 2013); the per tile-year
+  normalisation removes most of it (island land tree area +2.6 points from 1987–98 to 2022–26 instead of +7.2), but stable forest still reads
+  ~4 points lower in 1987–98 than after 2014, and the correction also removes some real regional year-to-year signal; the
+  outlying islands are not normalised. See "Normalisation".
 - **Timing of changes:** a full-year medoid mixes seasons (rice paddies, deciduous trees), so year-to-year differences include some phenology noise.

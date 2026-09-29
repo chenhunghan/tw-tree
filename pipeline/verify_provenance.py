@@ -9,7 +9,8 @@ USGS file for that product on Microsoft Planetary Computer, read the raw DN at
   col = (x_utm - 15 - scene_ulx) / 30,  row = (scene_uly - y_utm - 15) / 30
 (which must be integers), re-apply scaling + the recorded sensor calibration + the saved model locally, and
 compare with the stored tree fraction. For raw-DN exports (v3) the six DN read from Planetary Computer are also
-compared with the DN Earth Engine returned (build/cache), which must be identical integers.
+compared with the DN Earth Engine returned (build/cache), which must be identical integers. When the frac tile records a
+per tile-year normalisation (normalise.py), its gain and offset are applied to the calibrated reflectance before the model.
 
   uv run verify_provenance.py pilot 60
   uv run verify_provenance.py taiwan 20 local_medoid     # only tile-years fetched by that path (dn_source in the cache)
@@ -46,12 +47,16 @@ def predict(trees, fv):
     return float(np.mean(out))
 
 
-def features(dn, sensor, calib):
+def features(dn, sensor, calib, norm=None):
     sr = dn.astype("float64") * 0.0000275 - 0.2
     co = calib.get(sensor)          # (slope, intercept) recorded in the tile metadata, or None
     if co:
         sr = sr * np.array(co[0]) + np.array(co[1])
-    b = dict(zip(["blue", "green", "red", "nir", "swir1", "swir2"], sr.astype("float32")))
+    sr = sr.astype("float32")
+    if norm:                        # per tile-year normalisation from the frac tile metadata: sr * gain + offset
+        p = np.asarray(norm, np.float32)
+        sr = (sr * p[:6] + p[6:]).astype("float32")
+    b = dict(zip(["blue", "green", "red", "nir", "swir1", "swir2"], sr))
     nd = lambda a, c: np.float32((b[a] - b[c]) / (b[a] + b[c]))
     return {**b, "ndvi": nd("nir", "red"), "ndmi": nd("nir", "swir1"), "nbr": nd("nir", "swir2"), "ndwi": nd("green", "nir")}
 
@@ -83,6 +88,7 @@ def main(name, n, source=None):
         scenes = pmeta["scenes"]
         calib = pmeta.get("calibration") or {k: None if k in ("LC08", "LC09") else (ROY_SLOPE.tolist(), ROY_INTERCEPT.tolist()) for k in ("LT04", "LT05", "LE07", "LC08", "LC09")}
         yr = yr or rnd.choice(idx["years"])
+        norm = (json.loads(frac.schema.metadata[b"tpetree"]).get("normalisation") or {}).get("params", {}).get(str(yr))
         s = prov[f"s{yr}"].to_numpy()
         cand = np.flatnonzero(s != 65535)
         if not len(cand):
@@ -108,7 +114,7 @@ def main(name, n, source=None):
                 dn.append(int(ds.read(1, window=Window(col, row, 1, 1))[0, 0]))
         cache = ROOT / "build" / "cache" / name / str(t["zone"]) / f"{t['i']}_{t['j']}" / f"{yr}.npz"
         dn_ee = np.load(cache)["dn"][k // 256, k % 256].tolist() if cache.exists() and "dn" in np.load(cache).files else None
-        fv = features(np.array(dn[:6]), p[0], calib)
+        fv = features(np.array(dn[:6]), p[0], calib, norm)
         f_local = int(np.floor(np.clip(predict(trees, fv), 0, 1) * 100 + 0.5))
         r = {"year": yr, "x_utm": x, "y_utm": y, "product": pid, "col": colf, "row": rowf,
              "integer_position": colf == col and rowf == row, "qa_clear": (dn[6] & 0b111111) == 0,

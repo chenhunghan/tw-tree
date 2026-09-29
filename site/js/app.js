@@ -120,7 +120,8 @@ async function load() {
   frame = { ox: Math.round(ox), oy: Math.round(oy) };
   const r2 = index.model?.metrics_vs_worldcover_holdout?.r2;
   if (r2) $('metricR2').textContent = `R² ≈ ${r2.toFixed(2)}`;
-  if (index.name !== 'pilot') $('regionName').textContent = index.complete === false ? `全臺（製作中：${index.tiles.length}/${index.tiles_planned} 圖塊）` : '全臺';
+  if (index.name !== 'pilot') $('regionName').textContent = index.complete === false ? `全臺（製作中：${index.tiles.length}/${index.tiles_planned} 圖塊）`
+    : index.normalisation ? '全臺' : '全臺（未正規化）';
   streaming = index.tiles.length > EAGER_MAX || params.has('stream');
   if (streaming) {
     $('loadMsg').textContent = '全島概觀…';

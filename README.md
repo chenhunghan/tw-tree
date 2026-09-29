@@ -10,7 +10,9 @@ Weather, clouds and day/night are decorative.
 - **Data:** the Hugging Face dataset [chenhunghan/tw-tree](https://huggingface.co/datasets/chenhunghan/tw-tree)
   (CC BY 4.0). The browser reads the tiles from there; they are not stored in this repo.
 - **Pipeline:** `pipeline/` (Python run with `uv run`; Google Earth Engine). Every stored value traces to one raw
-  Landsat Collection 2 pixel: native UTM grid, medoid composite, per-pixel scene index.
+  Landsat Collection 2 pixel: native UTM grid, medoid composite, per-pixel scene index. A per tile-year reflectance
+  normalisation on stable forest and open-land pixels removes most of the drift over time; its parameters are stored
+  with each tile, and the unnormalised release is kept as `taiwan_raw/`.
 
 Design decisions, data sources, method and known limitations are in [AGENTS.md](AGENTS.md).
 

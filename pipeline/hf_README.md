@@ -20,8 +20,11 @@ Tree fraction (0–100 %) per 30 m Landsat pixel for each year, with per-pixel p
 Landsat scene each value came from. Data for the 3D viewer 臺灣樹冠時光機 (<https://chenhunghan.github.io/tw-tree/>).
 
 Releases:
-- **`taiwan/` — island-wide v3 (complete, 2026-09-29).** 761 tiles in UTM zones 51 and 50 covering the main island, Penghu,
-  Kinmen and Matsu (36,319 km² of land; 3.57 M ha of land pixels after the water mask). Code: <https://github.com/chenhunghan/tw-tree>.
+- **`taiwan/` — island-wide v3, normalised (2026-09-29).** 761 tiles in UTM zones 51 and 50 covering the main island,
+  Penghu, Kinmen and Matsu (36,319 km² of land; 3.57 M ha of land pixels after the water mask), with a per tile-year
+  reflectance normalisation that removes most of the drift over time (see Method). Code: <https://github.com/chenhunghan/tw-tree>.
+- **`taiwan_raw/` — the same release without the normalisation** (the first complete v3 publish). Provenance tiles are
+  byte-identical to `taiwan/`; only `f<year>`, the overview and the totals differ.
 - **`pilot/` — Taipei pilot v2** (20 tiles in zone 51, sensor-calibrated). Kept unchanged.
 
 ## Layout (`taiwan/` adds `own`, `land` and `overview.arrow.gz`)
@@ -57,7 +60,9 @@ Schema metadata key `tpetree` holds a JSON description.
 
 - `x_utm`, `y_utm`: exact pixel centre in EPSG:32651 (zone 51) or EPSG:32650 (zone 50). Values are multiples of 30 m on the
   native Landsat Collection 2 grid; **no resampling**.
-- `f<year>`: tree fraction percent, 255 = no clear observation that year.
+- `f<year>`: tree fraction percent, 255 = no clear observation that year. In `taiwan/` the frac metadata's
+  `normalisation.params[year]` holds that tile-year's per-band gain ×6 and offset ×6 (blue, green, red, nir, swir1, swir2),
+  applied as `sr · gain + offset` to the calibrated reflectance before the model.
 - `s<year>`: index into `scenes[year]` in the provenance metadata (Landsat product IDs), 65535 = none.
   The raw pixel is `col = (x_utm − 15 − scene_ulx) / 30`, `row = (scene_uly − y_utm − 15) / 30`.
 - `n<year>`: number of distinct clear acquisition dates in that year.
@@ -79,7 +84,12 @@ memory, so 173 tile-years were fetched as reflectance and inverted to the identi
 locally from the per-date raw DN (checked against Earth Engine on 40- and 122-scene tile-years: scene index, DN and date
 count identical for 100 % of pixels). `dn_source` in the build cache records the path.
 
-Complete island release (2026-09-29): 60 random stored pixels gave an integer raw pixel in 60/60, clear in QA_PIXEL in
+Normalised release (`taiwan/`, 2026-09-29), recomputing from the Planetary Computer DN with the calibration and the
+normalisation recorded in the tile metadata: 60/60 integer raw pixels and clear, DN identical in 59/59 same-processing
+cases, tree fraction **59/59 exact** in those cases (the 60th, a 2023 USGS reprocessing with different DN on Planetary
+Computer, is off by 1 point).
+
+Complete island release before normalisation (now `taiwan_raw/`, 2026-09-29): 60 random stored pixels gave an integer raw pixel in 60/60, clear in QA_PIXEL in
 60/60, raw DN identical to Planetary Computer in 59/59 same-processing cases (the 60th is a 2023 USGS reprocessing), and
 the recomputed tree fraction matched **60/60 exactly**. A further 20 pixels drawn only from the locally picked tile-years:
 20/20 integer positions and clear, DN identical in 19/19 same-processing cases, tree fraction 20/20 exact (5 products
@@ -108,6 +118,15 @@ pixels, local tree fraction within 1 point of Earth Engine's (99.8–100 % exact
   in every tile. Held-out (3 km blocks) agreement with WorldCover 2021: R² 0.46, MAE 21 points, bias −0.3 points. This is
   lower than the pilot's northern figure because the island sample includes many mountain grassland/bamboo pixels.
   A multi-year (2014–2025) model was tested and was no more stable over time, so the single-year model is used.
+- **Normalisation (`taiwan/`):** stable closed forest (Hansen tree cover 2000 ≥ 80 %, no loss 2001–2025, WorldCover 2021
+  tree ≥ 95 %, never built) should read the same every year, but its composite reflectance darkens over time in red and
+  SWIR (most in the north after 2013) and the model read that as more trees (80 % in 1987–98 → 91 % in 2022–26). For each
+  tile-year and band, a line `sr' = gain · sr + offset` maps the median reflectance of two anchor sets, stable forest and
+  stable open land (Hansen 2000 and WorldCover 2021 tree < 10 %, never built), onto the same tile's 2021 medians (the
+  model's training year). Medians are smoothed within each UTM zone (Gaussian σ ≈ 23 km); tiles with too few anchors borrow
+  from a wider neighbourhood (up to ~90 km); Penghu, Kinmen, Matsu and a few islet tiles have no anchors nearby and are not
+  normalised. A forest-only correction was tested and rejected: it flattened forest but pushed stable open land and partial
+  forest down by ~5–10 points. Parameters: `pipeline/model/normalisation_taiwan.json`, and each frac tile's metadata.
 - `pilot/` model: trained on Landsat 8 only (2021), the reference sensor.
 - A random-forest regression on 6 bands plus NDVI, NDMI, NBR and NDWI, trained on 2021 composites against ESA WorldCover 2021
   (tree class averaged to 30 m). On held-out 3 km blocks it agrees with WorldCover at R² ≈ 0.71 and MAE ≈ 13 points. That
@@ -116,7 +135,15 @@ pixels, local tree fraction within 1 point of Earth Engine's (99.8–100 % exact
 
 ## Limitations
 
-> **The post-2013 rise (investigated).** The pilot total rose ~54 % → ~64 % between 2013 and 2021. It is **mostly a
+> **Drift over time (normalised in `taiwan/`).** On a 4,000-pixel sample per tile, from 1987–98 to 2022–26: all land
+> 62.4 → 69.6 % raw vs 63.8 → 66.5 % normalised; stable forest 80 → 91 vs 84 → 88; partial forest (not used in the fit)
+> 57 → 57 vs 57 → 54; long-built pixels 18 → 11 vs 17 → 11. Mean year-to-year change of the all-land mean: 1.7 → 0.8 points.
+> Against Dynamic World (Sentinel-2, 2016–2025 tile means), the island slope is +0.04 points/yr; raw +0.39, normalised +0.08.
+> Trade-off: raw's island-wide year-to-year wiggles follow Dynamic World's in direction (r 0.83, ~5× larger), and the
+> normalisation removes them, so single-year changes of a few points over a region are not meaningful in either release.
+> Stable forest still reads ~4 points lower in 1987–98 than after 2014.
+
+> **The post-2013 rise (investigated before the normalisation; describes `taiwan_raw/` and `pilot/`).** The pilot total rose ~54 % → ~64 % between 2013 and 2021. It is **mostly a
 > measurement effect, not new canopy**: a Landsat-8-only rebuild keeps the trend (so it is not a sensor switch), but stable
 > closed forest (Hansen tree cover 2000 ≥ 80 %, no loss, WorldCover ≥ 0.95) rises just as much (77 % → 99 %), tracking
 > NDVI and inversely the L8 aerosol QA level, while Sentinel-2 Dynamic World stays flat on the same pixels. Island-wide,
@@ -133,10 +160,10 @@ pixels, local tree fraction within 1 point of Earth Engine's (99.8–100 % exact
 > composites) and has **not been independently verified**.
 
 
-- **Island totals (`taiwan/`, gap-filled land tree area):** mean 2.33 M ha (65.2 % of land) for 1987–98, 2.35 M ha (65.7 %)
-  for 2000–12, 2.50 M ha (70.0 %) for 2014–21 and 2.58 M ha (72.4 %) for 2022–26. 2022 is a single-year high (2.69 M ha,
-  75.3 %) between 2.51 M ha in 2021 and 2023. The post-2013 increase is largely the measurement drift described above, not
-  verified canopy gain; 1984 and 1986 have few scenes and rely on gap filling.
+- **Island totals (gap-filled land tree area, share of 3.57 M ha):** `taiwan/` (normalised) 66.7 % for 1987–98, 68.3 % for
+  2000–12, 69.1 % for 2014–21 and 69.3 % for 2022–26 (2021 70.3 %, 2022 70.5 %). `taiwan_raw/` 65.2 %, 65.7 %, 70.0 %, 72.4 %,
+  with a single-year high of 75.3 % in 2022; that post-2013 increase is largely the drift described above. 1984 and 1986
+  have few scenes and rely on gap filling.
 - No Tier-1 scenes over Taipei in 1982, 1983 or 1985. 1984 and 1986 have only 3 scenes each (low confidence).
 - Raw geolocation is about 12 m RMSE, so there can be sub-pixel shifts between years.
 - Same-year residual differences between sensors after calibration are within about ±3 points in a given year. Landsat 7 has SLC-off gaps from 2003.
