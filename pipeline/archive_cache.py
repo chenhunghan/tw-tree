@@ -105,7 +105,7 @@ def archive(repo, name, delete, limit=None):
         state_path.write_text(json.dumps(state, indent=1))
     api, tmp = HfApi(), ROOT / "build" / "archive_tmp"
     tmp.mkdir(exist_ok=True)
-    for extra in sorted(p for p in cache.iterdir() if p.is_file()):
+    for extra in sorted(p for p in cache.iterdir() if p.is_file() and not p.name.startswith(".")):
         retry(f"upload {extra.name}", lambda: api.upload_file(
             repo_id=repo, repo_type="dataset", path_or_fileobj=extra,
             path_in_repo=f"cache/{name}/{extra.name}", commit_message=f"cache/{name}: {extra.name}"))
@@ -192,7 +192,7 @@ def archive(repo, name, delete, limit=None):
     if len(state["parts"]) < len(state["plan"]):
         print(f"{len(state['parts'])}/{len(state['plan'])} parts verified; rerun to continue"); return
     if delete:
-        for extra in sorted(p for p in cache.iterdir() if p.is_file()):
+        for extra in sorted(p for p in cache.iterdir() if p.is_file() and not p.name.startswith(".")):
             extra.unlink()
         if not any(cache.rglob("*")):
             shutil.rmtree(cache)
