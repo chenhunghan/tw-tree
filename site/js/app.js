@@ -244,7 +244,7 @@ function streamTiles(now) {
   if (!streaming || now - lastStream < 400) return;
   lastStream = now;
   const dist = camera.position.distanceTo(controls.target);
-  const R = THREE.MathUtils.clamp(dist * 0.9, 6000, 16000);
+  const R = THREE.MathUtils.clamp(3000 + dist * 3, 6000, 16000);   // at least the tree radius (updateTrees)
   const want = [];
   if (dist < STREAM_DIST) {
     for (const e of ds.entries.values()) {
@@ -266,7 +266,7 @@ function streamTiles(now) {
     ds.loadTile(e).then((tile) => {
       prepareFilled(tile, years);
       addDetail(tile); refreshNeighbours(tile);
-      lastFocus = null;                          // trees can now be placed here
+      treesStale = true;                         // trees can now be placed here (rebuilt at most once a second)
       pending.get(k)?.(); pending.delete(k);
     }).catch((err) => console.warn(err)).finally(() => loading.delete(k));
   }
@@ -476,12 +476,17 @@ addEventListener('keydown', (e) => {
 
 // ---------- tree level of detail + sun ----------
 // Trees exist within `radius` of the focus and inside the view cone; leaf-card crowns within NEAR_DIST of the camera,
-// simplified ones to MID_DIST, envelopes beyond. Rebuild when idle after the view has changed enough (focus, zoom,
-// camera position or heading). Beyond the trees the terrain shader draws the canopy.
-// treeQ scales the radius to hold the frame rate: it shrinks when frames are slow and grows back when there is room.
+// simplified ones to MID_DIST, envelopes to FAR_DIST, 8-triangle crowns beyond. Past THIN_DIST from the camera the
+// trees are thinned on power-of-two pixel grids with wider crowns (same cover), so the forest reaches 6-14 km for
+// about the instance count of full density to 2 km; the outer fifth of the radius dissolves into the terrain's canopy.
+// Rebuild when idle after the view has changed enough (focus, zoom, camera position or heading).
+// treeQ holds the frame rate: it shrinks when frames are slow (thinning starts nearer, near detail and the radius
+// shrink) and grows back when there is room.
 let lastFocus = null, lastRadius = 0, lastCam = null, lastMove = 0, shadowSize = 0, lastHeading = 0;
+let treesStale = false, lastBuild = 0;
 let treeQ = +(params.get('trees') || 1), frameEma = 1 / 60, lastQ = 0;
 const fixedQ = params.has('trees');
+const THIN_DIST = 3000;
 function adaptTrees(dt, now) {
   frameEma += (dt - frameEma) * 0.05;
   if (fixedQ || now - lastQ < 2500 || !lastFocus) return;
@@ -499,18 +504,21 @@ function updateTrees() {
   const dist = camera.position.distanceTo(controls.target);
   if (dist > 14000) { forest.visible = false; city.visible = false; uniforms.uTreeR.value = 0; return; }
   forest.visible = true; city.visible = true;
-  const radius = THREE.MathUtils.clamp(dist * 1.6, 1000, 3600) * treeQ;
+  // a slow frame costs density far away first (thinning starts nearer), range only a little
+  const radius = THREE.MathUtils.clamp(3000 + dist * 3, 6000, 14000) * (0.5 + 0.5 * treeQ);
   const dir = camera.getWorldDirection(new THREE.Vector3()), heading = Math.atan2(dir.x, dir.z);
   const turned = Math.abs(Math.atan2(Math.sin(heading - lastHeading), Math.cos(heading - lastHeading))) > 0.3;
-  const moved = !lastFocus || lastFocus.distanceTo(controls.target) > radius * 0.25 || turned ||
+  const moved = !lastFocus || (treesStale && performance.now() - lastBuild > 1000) || lastFocus.distanceTo(controls.target) > Math.min(radius * 0.25, 400 + dist * 0.3) || turned ||
     Math.abs(radius - lastRadius) / lastRadius > 0.3 || lastCam.distanceTo(camera.position) > Math.max(150, dist * 0.2);
   if (moved && performance.now() - lastMove > 200) {
     lastFocus = controls.target.clone(); lastRadius = radius; lastCam = camera.position.clone(); lastHeading = heading;
+    treesStale = false; lastBuild = performance.now();
     // horizontal half-angle of the view plus a margin, so a small turn doesn't show the edge; top-down views keep all
     const hfov = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect);
     const steep = -dir.y > 0.8;
-    forest.build(ds, frame, lastFocus, radius, years, lastCam, dir, steep ? Math.PI : hfov + 0.55, NEAR_DIST * Math.min(1, treeQ * treeQ), shadowHalf(dist) * 1.35);
-    uniforms.uTreeFocus.value.copy(lastFocus); uniforms.uTreeR.value = radius;
+    forest.build(ds, frame, lastFocus, radius, years, lastCam, dir, steep ? Math.PI : hfov + 0.55, NEAR_DIST * Math.min(1, treeQ * treeQ), shadowHalf(dist) * 1.35, THIN_DIST * treeQ,
+      2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / innerHeight);
+    uniforms.uTreeFocus.value.copy(lastFocus); uniforms.uTreeR.value = radius * 0.9;   // canopy lift starts as trees thin
     city.build(ds, frame, lastFocus, THREE.MathUtils.clamp(dist * 0.75, 700, 2400) * 1.3);
     const k = Math.min(Math.floor(yearPos), years.length - 2);
     forest.setYears(years[k], years[k + 1]);
@@ -844,12 +852,12 @@ function step(dt, now = performance.now()) {
 window.__app = {
   setYear: (y) => { playing = false; updatePlayButton(); setYearPos(years.indexOf(y)); },
   advance: (sec) => { for (let i = 0; i < sec * 30; i++) step(1 / 30); composer.render(); },
-  setMiniature, setFov, weather, renderer, sun, forest,
+  setMiniature, setFov, weather, renderer, sun, forest, scene, city, camera, controls, composer, detail, coarse,
   camAngles: () => ({ az: controls.getAzimuthalAngle(), pol: controls.getPolarAngle() }),
   flyTo, get trees() { return forest.count; }, get buildings() { return city.n; }, get treeStats() { return { ...forest.stats, triangles: Math.round(forest.triangles) }; }, get treeQ() { return treeQ; },
   renderInfo: () => renderer.info.render,
   view: (lon, lat, dist, elevDeg, azDeg = 200) => { viewLonLat(lon, lat, dist, elevDeg, azDeg); },   // test hook
-  shareUrl, get ready() { return terrain.length > 0; }, get loaded() { return { tiles: ds.tiles.size, loading: loading.size, coarse: coarse.size }; },
+  shareUrl, rebuildTrees: () => { lastFocus = null; }, get ready() { return terrain.length > 0; }, get loaded() { return { tiles: ds.tiles.size, loading: loading.size, coarse: coarse.size }; },
 };
 
 requestAnimationFrame(tick);

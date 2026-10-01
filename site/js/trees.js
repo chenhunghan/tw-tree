@@ -12,7 +12,9 @@ import { CLOUD_GLSL } from './weather.js';
 const SLOTS = 4;
 export const NEAR_DIST = 320;          // metres from the camera: leaf-card crowns inside
 export const MID_DIST = 1500;          // simplified crowns inside, envelopes only outside
-const LODS = ['near', 'mid', 'far'];
+export const FAR_DIST = 3000;          // envelopes with trunks inside, crowns only (no trunk) beyond
+const STRIDE_PX = 10;                  // a stride-widened crown (~15 m x stride) stays below this many screen pixels
+const LODS = ['near', 'mid', 'far', 'dist'];
 const CLOSURE = 1.5;                   // horizontal crown scale: 4 crowns per 30 m pixel close the canopy at 100 %
 const INST_ATTRS = [['aTint', 3], ['aThr', 1], ['aFa', 1], ['aFb', 1], ['aNd', 1]];
 
@@ -286,6 +288,7 @@ function leafy({ trunks, midTrunk, clusters: cl0, cell = CELL.broad, coreR = 0.6
       leafCards({ ...env, n: 18, size: env.r * 0.95, cell, seed: 9 }),
     ]),
     far: () => clump({ ...env, detail: 0, rough: 0.3, seed: 7, dark: 0.9 }),
+    dist: () => clump({ ...env, detail: 0, rough: 0.2, seed: 7, dark: 0.9 }),
   };
 }
 
@@ -395,6 +398,7 @@ function conifer({ H, crownBase, crownR, trunkR, seed, color, alt, bark = '#5b4c
       trunk({ h: crownBase + 1, r0: trunkR, r1: trunkR * 0.6, segs: 3, hseg: 1, color: bark }),
       cone({ y: crownBase - 0.5, r: crownR * 0.95, h: coreH + 0.5, segs: 6, rough: 0.12, color, dark: 0.72 }),
     ]),
+    dist: () => cone({ y: crownBase * 0.5, r: crownR * 0.95, h: H - crownBase * 0.5, segs: 4, rough: 0, color, dark: 0.72 }),
   };
 }
 
@@ -588,7 +592,7 @@ export class Forest {
     const mat = makeMaterial(uniforms, leafTex), depth = makeDepthMaterial(uniforms, leafTex);
     for (const sp of SPECIES) {
       for (const lod of LODS) {
-        this.buckets.set(`${sp.key}:${lod}`, { sp, lod, template: sp[lod](), mat, depth, mesh: null, cap: 0, n: 0, refs: null });
+        this.buckets.set(`${sp.key}:${lod}`, { sp, lod, template: (sp[lod] ?? sp.far)(), mat, depth, mesh: null, cap: 0, n: 0, refs: null });
       }
     }
     this.tileList = [];
@@ -611,7 +615,7 @@ export class Forest {
     const g = b.template.clone();
     for (const [name, size] of INST_ATTRS) g.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(cap * size), size));
     const mesh = new THREE.InstancedMesh(g, b.mat, cap);
-    Object.assign(mesh, { customDepthMaterial: b.depth, castShadow: b.lod !== 'far', receiveShadow: b.lod === 'near', frustumCulled: false, visible: this._visible });
+    Object.assign(mesh, { customDepthMaterial: b.depth, castShadow: b.lod === 'near' || b.lod === 'mid', receiveShadow: b.lod === 'near', frustumCulled: false, visible: this._visible });
     // casters come first: the shadow pass draws only them (trees inside the shadow box), the view draws all
     mesh.onBeforeShadow = () => { mesh.count = b.nCast; };
     mesh.onAfterShadow = () => { mesh.count = b.n; };
@@ -622,7 +626,13 @@ export class Forest {
   // Rebuild instances for pixels within `radius` of `focus` that lie inside the view cone (horizontal half-angle
   // `half` around `camDir`; everything near the focus is kept regardless); detail level by distance to the camera,
   // relative to the tree's size. Near/mid trees within `shadowR` of the focus cast shadows.
-  build(ds, frame, focus, radius, years, camPos, camDir = null, half = Math.PI, nearDist = NEAR_DIST, shadowR = Infinity) {
+  // Far away, crowns are a few screen pixels: beyond `thin` from the camera only every 2nd/4th/8th pixel (power-of-two
+  // grids, so a coarser ring is a subset of a finer one) carries trees, spread over its block and widened by the
+  // stride so canopy cover is unchanged; the instance count then grows with log(radius) instead of radius². The outer
+  // 20 % of the radius is thinned out pixel by pixel, so the trees dissolve into the terrain's canopy instead of
+  // ending in a line.
+  // `pixAng`: the angle of one screen pixel (radians); it caps the stride so widened crowns never read as blobs.
+  build(ds, frame, focus, radius, years, camPos, camDir = null, half = Math.PI, nearDist = NEAR_DIST, shadowR = Infinity, thin = Infinity, pixAng = 0.001) {
     // scratch output per bucket and caster/non-caster (typed arrays, grown as needed and reused across builds)
     if (!this.lists) {
       this.bucketArr = [...this.buckets.values()];
@@ -654,7 +664,8 @@ export class Forest {
       return L.n++;
     };
     this.tileList = [...ds.tiles.values()];
-    const P = ds.tilePx, res = ds.res, r2 = radius * radius, near2 = nearDist * nearDist, mid2 = MID_DIST * MID_DIST;
+    const P = ds.tilePx, res = ds.res, r2 = radius * radius, near2 = nearDist * nearDist, mid2 = MID_DIST * MID_DIST, far2 = FAR_DIST * FAR_DIST;
+    const edgeR = radius * 0.8, edge2 = edgeR * edgeR, thin2 = thin * thin;
     const cosHalf = Math.cos(Math.min(Math.PI, half));
     let dirX = 0, dirZ = 0;
     if (camDir) { const l = Math.hypot(camDir.x, camDir.z) || 1; dirX = camDir.x / l; dirZ = camDir.z / l; }
@@ -679,55 +690,75 @@ export class Forest {
         c0 = Math.max(0, Math.floor((X0 - radius - tile.x0) / res)); c1 = Math.min(P - 1, Math.ceil((X0 + radius - tile.x0) / res));
         r0 = Math.max(0, Math.floor((tile.y0 + ds.tileM - (Y0 + radius)) / res)); r1 = Math.min(P - 1, Math.ceil((tile.y0 + ds.tileM - (Y0 - radius)) / res));
       }
-      const maxFs = tile.maxF;
-      for (let row = r0; row <= r1; row++) for (let col = c0; col <= c1; col++) {
-        const k = row * P + col;
-        const maxF = maxFs[k];
-        if (maxF < 8) continue;                                   // never enough cover for a tree
-        if ((tile.own && !tile.own[k]) || (tile.land && !tile.land[k])) continue;   // other zone's pixel, or water
-        if (!tile.land && tile.z[k] * EXAG < 1.2) continue;                    // no water mask: DEM ~0 m is drawn as water
-        const [wx, , wz] = toWorld(frame, tile.zone, tile.x[k], tile.y[k], 0);
-        const dx = wx - focus.x, dz = wz - focus.z, d2 = dx * dx + dz * dz;
-        if (d2 > r2) continue;
-        if (cull && d2 > keepR2) {
-          const vx = wx - camPos.x, vz = wz - camPos.z, vl = Math.hypot(vx, vz);
-          if (vl > 120 && (vx * dirX + vz * dirZ) / vl < cosHalf) continue;
+      const maxFs = tile.maxF, B = 8, bHalf = B * res * 0.71;
+      // 8x8-pixel blocks: radius, view cone and stride are decided once per block (from its centre), and a block
+      // at stride st only visits every st-th pixel of it
+      for (let br = r0 - (r0 % B); br <= r1; br += B) for (let bcol = c0 - (c0 % B); bcol <= c1; bcol += B) {
+        const kc = Math.min(P - 1, br + B / 2) * P + Math.min(P - 1, bcol + B / 2);
+        const [bx, , bz] = toWorld(frame, tile.zone, tile.x[kc], tile.y[kc], 0);
+        const bdx = bx - focus.x, bdz = bz - focus.z, bd2 = bdx * bdx + bdz * bdz;
+        if (bd2 > (radius + bHalf) ** 2) continue;
+        if (cull && bd2 > keepR2) {
+          const vx = bx - camPos.x, vz = bz - camPos.z, vl = Math.hypot(vx, vz);
+          if (vl > 120 + bHalf && (vx * dirX + vz * dirZ) / vl < Math.cos(Math.min(Math.PI, half + bHalf / vl))) continue;
         }
-        const X = tile.x[k], Y = tile.y[k], z = tile.z[k];
-        const rand = rng(X * 73856093 ^ Y * 19349663);
-        const bambooPatch = z < 1500 ? smooth(0.62, 0.78, vnoise2(X / 260 + 3.1, Y / 260)) : 0;
-        const acaciaStand = z < 500 ? smooth(0.55, 0.75, vnoise2(X / 420 + 7.7, Y / 420)) : 0;
-        const weights = speciesWeights(z, maxF < 45, bambooPatch, acaciaStand);
-        const order = PERMS[Math.floor(rand() * 24)];
-        for (let s = 0; s < SLOTS; s++) {
-          const thr = (order[s] + 0.5) / SLOTS + (rand() - 0.5) * 0.18;
-          if (thr * 100 > maxF + 8) { rand(); rand(); continue; }
-          const sp = pick(weights, rand());
-          // 2x2 sub-cells with strong jitter, so rows of the 30 m grid don't show at a distance
-          const ox = ((s % 2) - 0.5) * res * 0.46 + (rand() - 0.5) * res * 0.62;
-          const oz = ((s >> 1) - 0.5) * res * 0.46 + (rand() - 0.5) * res * 0.62;
-          const cc = Math.min(P - 1, Math.max(0, col + Math.round(ox / res))), rr = Math.min(P - 1, Math.max(0, row + Math.round(oz / res)));
-          const zz = 0.5 * (z + tile.z[rr * P + cc]);
-          const px = wx + ox, py = zz * EXAG - 0.4, pz = wz + oz;
-          const si = this.spIndex[sp], spec = SPECIES[si];
-          const ang = rand() * Math.PI * 2, cs = Math.cos(ang), sn = Math.sin(ang);
-          const size = spec.size[0] + rand() * (spec.size[1] - spec.size[0]);
-          const ddx = px - camPos.x, ddy = py - camPos.y, ddz = pz - camPos.z, c2 = (ddx * ddx + ddy * ddy + ddz * ddz) / (size * size);
-          const lod = c2 < near2 ? 0 : c2 < mid2 ? 1 : 2;
-          // widen crowns where the canopy is dense (street trees in sparse pixels stay slimmer)
-          const wide = size * (1 + (CLOSURE - 1) * smooth(30, 80, maxF));
-          const tall = size * (1 + (CLOSURE - 1) * 0.45 * smooth(30, 80, maxF));
-          emit(si, lod, px, py, pz, cs, sn, wide * (0.9 + rand() * 0.2), tall * (0.84 + rand() * 0.32), wide * (0.9 + rand() * 0.2), rand, thr, ti, k);
-        }
-        // understorey in dense, non-urban forest: one clump per pixel, appears with the canopy
-        if (maxF >= 55 && z < 3000) {
-          const ru = rng((X * 83492791) ^ (Y * 2654435761) ^ 0x5bd1e995), th = 0.5 + ru() * 0.25;
-          const ox = (ru() - 0.5) * res * 0.8, oz = (ru() - 0.5) * res * 0.8, px = wx + ox, pz = wz + oz;
-          const sz = 0.9 + ru() * 0.5, ddx = px - camPos.x, ddz = pz - camPos.z, ddy = z * EXAG - camPos.y;
-          const c2 = (ddx * ddx + ddy * ddy + ddz * ddz) / (sz * sz);
-          if (c2 < mid2) {
-            const ang = ru() * Math.PI * 2;
-            emit(this.spIndex.understorey, c2 < near2 ? 0 : 1, px, z * EXAG - 0.3, pz, Math.cos(ang), Math.sin(ang), sz * 1.3, sz * (0.8 + ru() * 0.5), sz * 1.3, ru, th, ti, k);
+        const cdx = bx - camPos.x, cdy = tile.z[kc] * EXAG - camPos.y, cdz = bz - camPos.z, dc2 = cdx * cdx + cdy * cdy + cdz * cdz;
+        let st = dc2 <= thin2 ? 1 : dc2 > 16 * thin2 ? 8 : dc2 > 4 * thin2 ? 4 : 2;     // stride by distance to the camera
+        while (st > 1 && (st * 15) ** 2 > dc2 * (STRIDE_PX * pixAng) ** 2) st >>= 1;    // ... capped by on-screen size
+        for (let row = br; row < Math.min(br + B, r1 + 1); row += st) for (let col = bcol; col < Math.min(bcol + B, c1 + 1); col += st) {
+          if (row < r0 || col < c0) continue;
+          const k = row * P + col;
+          const maxF = maxFs[k];
+          if (maxF < 8) continue;                                   // never enough cover for a tree
+          if ((tile.own && !tile.own[k]) || (tile.land && !tile.land[k])) continue;   // other zone's pixel, or water
+          if (!tile.land && tile.z[k] * EXAG < 1.2) continue;                    // no water mask: DEM ~0 m is drawn as water
+          const [wx, , wz] = toWorld(frame, tile.zone, tile.x[k], tile.y[k], 0);
+          const dx = wx - focus.x, dz = wz - focus.z, d2 = dx * dx + dz * dz;
+          if (d2 > r2) continue;
+          if (cull && d2 > keepR2) {
+            const vx = wx - camPos.x, vz = wz - camPos.z, vl = Math.hypot(vx, vz);
+            if (vl > 120 && (vx * dirX + vz * dirZ) / vl < cosHalf) continue;
+          }
+          const X = tile.x[k], Y = tile.y[k], z = tile.z[k];
+          if (d2 > edge2 && ihash(X + 7, Y - 3) < (Math.sqrt(d2) - edgeR) / (radius - edgeR)) continue;
+          const rand = rng(X * 73856093 ^ Y * 19349663);
+          const bambooPatch = z < 1500 ? smooth(0.62, 0.78, vnoise2(X / 260 + 3.1, Y / 260)) : 0;
+          const acaciaStand = z < 500 ? smooth(0.55, 0.75, vnoise2(X / 420 + 7.7, Y / 420)) : 0;
+          const weights = speciesWeights(z, maxF < 45, bambooPatch, acaciaStand);
+          const order = PERMS[Math.floor(rand() * 24)];
+          for (let s = 0; s < SLOTS; s++) {
+            const thr = (order[s] + 0.5) / SLOTS + (rand() - 0.5) * 0.18;
+            if (thr * 100 > maxF + 8) { rand(); rand(); continue; }
+            const sp = pick(weights, rand());
+            // 2x2 sub-cells with strong jitter, so rows of the 30 m grid don't show at a distance
+            // (a stride block spans st x st pixels from this one: its centre is (st - 1) / 2 pixels down and right)
+            const bc = (st - 1) / 2 * res;
+            const ox = bc + (((s % 2) - 0.5) * res * 0.46 + (rand() - 0.5) * res * 0.62) * st;
+            const oz = bc + (((s >> 1) - 0.5) * res * 0.46 + (rand() - 0.5) * res * 0.62) * st;
+            const cc = Math.min(P - 1, Math.max(0, col + Math.round(ox / res))), rr = Math.min(P - 1, Math.max(0, row + Math.round(oz / res)));
+            const zz = st > 1 ? tile.z[rr * P + cc] : 0.5 * (z + tile.z[rr * P + cc]);
+            const px = wx + ox, py = zz * EXAG - 0.4, pz = wz + oz;
+            const si = this.spIndex[sp], spec = SPECIES[si];
+            const ang = rand() * Math.PI * 2, cs = Math.cos(ang), sn = Math.sin(ang);
+            const size = spec.size[0] + rand() * (spec.size[1] - spec.size[0]);
+            const ddx = px - camPos.x, ddy = py - camPos.y, ddz = pz - camPos.z, c2 = (ddx * ddx + ddy * ddy + ddz * ddz) / (size * size);
+            const lod = c2 < near2 ? 0 : c2 < mid2 ? 1 : c2 < far2 ? 2 : 3;
+            // widen crowns where the canopy is dense (street trees in sparse pixels stay slimmer); a stride block's
+            // crowns are st x wider (same cover) and somewhat taller
+            const wide = size * (1 + (CLOSURE - 1) * smooth(30, 80, maxF)) * st;
+            const tall = size * (1 + (CLOSURE - 1) * 0.45 * smooth(30, 80, maxF)) * st ** 0.4;
+            emit(si, lod, px, py, pz, cs, sn, wide * (0.9 + rand() * 0.2), tall * (0.84 + rand() * 0.32), wide * (0.9 + rand() * 0.2), rand, thr, ti, k);
+          }
+          // understorey in dense, non-urban forest: one clump per pixel, appears with the canopy
+          if (maxF >= 55 && z < 3000 && st === 1) {
+            const ru = rng((X * 83492791) ^ (Y * 2654435761) ^ 0x5bd1e995), th = 0.5 + ru() * 0.25;
+            const ox = (ru() - 0.5) * res * 0.8, oz = (ru() - 0.5) * res * 0.8, px = wx + ox, pz = wz + oz;
+            const sz = 0.9 + ru() * 0.5, ddx = px - camPos.x, ddz = pz - camPos.z, ddy = z * EXAG - camPos.y;
+            const c2 = (ddx * ddx + ddy * ddy + ddz * ddz) / (sz * sz);
+            if (c2 < mid2) {
+              const ang = ru() * Math.PI * 2;
+              emit(this.spIndex.understorey, c2 < near2 ? 0 : 1, px, z * EXAG - 0.3, pz, Math.cos(ang), Math.sin(ang), sz * 1.3, sz * (0.8 + ru() * 0.5), sz * 1.3, ru, th, ti, k);
+            }
           }
         }
       }

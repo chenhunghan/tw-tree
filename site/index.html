@@ -210,7 +210,7 @@
 <dialog id="about">
   <div class="body" data-lang="zh">
     <h2>資料與限制</h2>
-    <p>每個 30 公尺像元的樹冠比例，由 Landsat 4、5、7、8、9 衛星影像（USGS Collection 2 Level-2，Tier 1）逐年估計。畫面上的樹是示意：數量與樹冠比例成正比，不代表實際的單株樹木；樹種依海拔帶與都市環境隨機配置，樹葉由程式繪製；濃密森林的樹下另畫示意的林下灌木。鏡頭附近幾公里內畫出立體的樹，更遠處的森林以地面上的樹冠紋理與約 13 公尺的樹冠高度表現（同樣依樹冠比例）；電腦較慢時，立體樹的範圍會自動縮小以維持流暢。</p>
+    <p>每個 30 公尺像元的樹冠比例，由 Landsat 4、5、7、8、9 衛星影像（USGS Collection 2 Level-2，Tier 1）逐年估計。畫面上的樹是示意：數量與樹冠比例成正比，不代表實際的單株樹木；樹種依海拔帶與都市環境隨機配置，樹葉由程式繪製；濃密森林的樹下另畫示意的林下灌木。鏡頭附近畫出細緻的立體樹，越遠越簡化；約 3 公里外只在每 2、4、8 個像元放一棵、樹冠相應加寬（覆蓋比例不變），因此立體樹可延伸到 6–14 公里，最外圈逐漸稀疏、融入地面的樹冠紋理與約 13 公尺的樹冠高度（同樣依樹冠比例）。電腦較慢時，遠處會更早開始稀疏（但樹冠在畫面上不會大於約 10 像素），並縮小範圍，以維持流暢。</p>
     <h3>怎麼算的</h3>
     <ul>
       <li>每年、每個像元取一景真實觀測（medoid 合成），因此每個數值都能追溯到單一原始影像與像元。點選地面即可查看來源影像編號。</li>
@@ -247,7 +247,7 @@
   </div>
   <div class="body" data-lang="en" lang="en" hidden>
     <h2>Data &amp; limits</h2>
-    <p>Tree cover (the share of each 30 m pixel covered by tree canopy) is estimated year by year from Landsat 4, 5, 7, 8 and 9 imagery (USGS Collection 2 Level-2, Tier 1). The trees on screen are illustrative: their number follows the tree cover, not real individual trees. Species are assigned at random by elevation band and urban setting, the foliage is drawn by code, and dense forest gets an illustrative shrub layer. Within a few kilometres of the camera the trees are 3D; farther away the forest is drawn as a canopy texture on the ground with a canopy height of about 13 m (also following tree cover). On slower computers the 3D tree radius shrinks automatically to keep things smooth.</p>
+    <p>Tree cover (the share of each 30 m pixel covered by tree canopy) is estimated year by year from Landsat 4, 5, 7, 8 and 9 imagery (USGS Collection 2 Level-2, Tier 1). The trees on screen are illustrative: their number follows the tree cover, not real individual trees. Species are assigned at random by elevation band and urban setting, the foliage is drawn by code, and dense forest gets an illustrative shrub layer. Near the camera the 3D trees are detailed and they get simpler with distance. Beyond about 3 km only every 2nd, 4th or 8th pixel carries trees, with correspondingly wider crowns (the same cover), so 3D trees reach 6–14 km; the outermost band thins out into the canopy texture drawn on the ground with a canopy height of about 13 m (also following tree cover). On slower computers the thinning starts nearer (widened crowns never exceed about 10 screen pixels) and the range shrinks, to keep things smooth.</p>
     <h3>How it is computed</h3>
     <ul>
       <li>For each year and pixel, one real observation is kept (a medoid composite), so every value can be traced to a single original scene and pixel. Click the ground to see the source scene ID.</li>

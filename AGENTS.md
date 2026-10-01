@@ -189,7 +189,7 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
 - **Trees and canopy (2026-09-29):** crowns are clusters of alpha-tested leaf cards (four sprig textures painted on a canvas
   at startup: broadleaf, acacia, conifer needles, bamboo; read as linear greys that multiply the vertex colour) around a
   small dark core, with crown-shaped normals. LODs: near (< 320 m: cards per cluster), mid (< 1.5 km: one envelope core +
-  16 cards), far (envelope only, no shadow). Instances cover `clamp(1.6 × distance, 1–3.6 km)` around the focus, only
+  16 cards), far (envelope only, no shadow). Instances cover the focus area (see "Tree range"), only
   inside the view cone (horizontal half-FOV + 0.55 rad; all around for steep views) and rebuild on a > 17° turn. Crowns are
   widened up to 1.5× where the pixel's max cover is high, so 100 % closes the canopy. Beyond the trees the terrain shader
   draws the canopy by on-screen scale: lit ~9 m crown cells where crowns are 1–12 px (share of cells = tree fraction),
@@ -198,6 +198,17 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   ~18 ms; `?trees=1` fixes it (tests). Measured on an M2 Pro at 1280×577: 60 fps at the 1.7 km start view (~70k trees,
   ~2M triangles), ~47 fps with the camera in the canopy at 350 m; rebuilds 30–70 ms for up to 120k trees (per-tile
   cached max cover, row/column window, typed-array output). Alpha-to-coverage was dropped: it left white specks at night.
+- **Tree range (2026-10-01):** instanced trees reach `clamp(3 km + 3 × distance, 6–14 km) × (0.5 + 0.5 treeQ)` around
+  the focus instead of 1–3.6 km. Four LODs: near < 320 m, mid < 1.5 km, far (20-tri envelope + trunk) < 3 km, dist
+  (20-tri crown, 4-sided cone for conifers, no trunk) beyond. Past `THIN_DIST` (3 km × treeQ) from the camera, 8 × 8-pixel blocks get a stride of
+  2/4/8 (at 1×/2×/4× that distance), capped so a widened crown (15 m × st) stays under 10 screen px: only every st-th pixel is visited and its 4 trees spread over the block with crowns
+  st× wider and st^0.4× taller (same cover; power-of-two grids, so coarser rings are subsets). The outer 20 % of the radius
+  is dropped pixel by pixel (hashed, rising to 100 % at the edge) and `uTreeR` is 0.9 × radius, so the canopy lift on the
+  terrain takes over as trees thin. Tile streaming follows the tree radius; tile arrivals coalesce into at most one rebuild
+  per second. Measured (`?trees=1`, 1280×720): 3.2 km view 85k trees / 1.13M tri (was 120k / 2.47M, forest ending ~4 km
+  out), 900 m oblique view 60k / 1.62M (was 20k / 1.11M); steady rebuilds ~50 ms. Frame timing on the test machine was
+  too noisy to compare (GPU timer 50–98 ms for identical frames; another GPU load was running). In the 900 m oblique
+  view, freezing the shadow map was the one toggle that clearly sped frames up (to the 16.7 ms vsync floor); not yet fixed.
 - **Forest realism (2026-10-01, ideas from boring-forest.vercel.app):**
   - Conifers (cypress, hemlock, fir) are grown as whorls of branches. Each branch carries needle-spray cards along it:
     near = 2 cards per branch, folded along the stem so they never vanish edge-on; mid = every 2nd whorl, 1 flat card.
