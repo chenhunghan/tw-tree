@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { MapControls } from 'three/addons/controls/MapControls.js';
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { Pass, FullScreenQuad } from 'three/addons/postprocessing/Pass.js';
+import { CopyShader } from 'three/addons/shaders/CopyShader.js';
 import { HorizontalTiltShiftShader } from 'three/addons/shaders/HorizontalTiltShiftShader.js';
 import { VerticalTiltShiftShader } from 'three/addons/shaders/VerticalTiltShiftShader.js';
 import { DataSet, NODATA_F, NODATA_S } from './data.js';
@@ -15,6 +15,7 @@ import { Forest, NEAR_DIST } from './trees.js';
 import { City } from './buildings.js';
 import { t, lang, applyDom, levelName } from './i18n.js';
 import { Story } from './story.js';
+import { MapNav } from './nav.js';
 
 const params = new URLSearchParams(location.search);
 const HF = 'https://huggingface.co/datasets/chenhunghan/tw-tree/resolve/main/';
@@ -26,9 +27,28 @@ const LOW_SCENES = 5;
 const $ = (id) => document.getElementById(id);
 applyDom();
 
+// Foldable panels: a chevron button toggles .folded on its panel (CSS hides the .fold-body parts). The header details
+// and the timeline legend start folded to leave the view open; the choice is remembered in this browser, except for the
+// story card, which always opens expanded.
+function setFold(btn, folded, save = true) {
+  btn.closest('.panel').classList.toggle('folded', folded);
+  btn.setAttribute('aria-expanded', String(!folded)); btn.title = btn.ariaLabel = t(folded ? 'expand' : 'collapse');
+  if (save && btn.dataset.persist !== 'no') try { localStorage.setItem('tpetree.fold.' + btn.dataset.fold, folded ? '1' : '0'); } catch {}
+}
+for (const btn of document.querySelectorAll('button.fold')) {
+  let saved = null;
+  try { saved = localStorage.getItem('tpetree.fold.' + btn.dataset.fold); } catch {}
+  setFold(btn, btn.dataset.persist !== 'no' && saved != null ? saved === '1' : btn.dataset.default === 'folded', false);
+  btn.addEventListener('click', (e) => { e.stopPropagation(); setFold(btn, !btn.closest('.panel').classList.contains('folded')); });
+}
+
 // ---------- scene ----------
-// Logarithmic depth: the view spans 5 m to 900 km, and water 4 m above the sea plane must not z-fight (flicker).
-const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false, logarithmicDepthBuffer: true });
+// The view spans 5 m to 900 km, and water 4 m above the sea plane must not z-fight (flicker): reversed-Z float depth
+// where the browser has EXT_clip_control, else a logarithmic depth buffer. Log depth writes gl_FragDepth, which turns
+// off early depth rejection (and hidden-surface removal on Apple GPUs), so every overlapping fragment is shaded.
+const reverseZ = params.get('depth') !== 'log' && !!document.createElement('canvas').getContext('webgl2')?.getExtension('EXT_clip_control');
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false,
+  reverseDepthBuffer: reverseZ, logarithmicDepthBuffer: !reverseZ });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -39,12 +59,12 @@ $('scene').appendChild(renderer.domElement);
 const scene = new THREE.Scene();
 scene.fog = new THREE.FogExp2(new THREE.Color(0xd6e3e6), 0.000032);
 const camera = new THREE.PerspectiveCamera(34, innerWidth / innerHeight, 5, 900000);
-const controls = new MapControls(camera, renderer.domElement);
-controls.enableDamping = true;
+// Google-Maps-style navigation (js/nav.js); the camera stays above the displayed ground.
+const controls = new MapNav(camera, renderer.domElement,
+  (x, z) => (frame ? groundDisplay(...worldToDisplayUtm(frame, x, z)) * EXAG : 0));
 controls.maxPolarAngle = Math.PI * 0.44;
 controls.minDistance = 120;
 controls.maxDistance = 420000;          // whole island
-controls.zoomToCursor = true;
 
 // Light: the weather module moves the sun (or moon) through the day and sets sky, fog and light colours.
 const hemi = new THREE.HemisphereLight(0xd4e6f5, 0x4d5a3c, 1.05);
@@ -62,10 +82,26 @@ const sea = new THREE.Mesh(new THREE.PlaneGeometry(4000000, 4000000), makeWaterM
 sea.rotation.x = -Math.PI / 2; sea.position.y = -1.5; sea.receiveShadow = true;
 scene.add(sea);
 
-// Post-processing (as in lns-lab): MSAA half-float target, faint bloom, tilt-shift "miniature" blur, grade, output.
-const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+// Post-processing (as in lns-lab): faint bloom, tilt-shift "miniature" blur, grade, output. The scene is drawn into a
+// 4x MSAA half-float target and resolved once; the post passes run on single-sample targets (multisampled ones cost a
+// load + store of every sample per full-screen pass, ~30-40 ms on an M2 at 1280x720).
+class MsaaRenderPass extends Pass {
+  constructor(scene, camera) {
+    super();
+    this.scene = scene; this.camera = camera; this.needsSwap = false;
+    this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+    this.copy = new FullScreenQuad(new THREE.ShaderMaterial({ ...CopyShader, uniforms: THREE.UniformsUtils.clone(CopyShader.uniforms), depthTest: false, depthWrite: false }));
+    this.copy.material.uniforms.tDiffuse.value = this.target.texture;
+  }
+  setSize(w, h) { this.target.setSize(w, h); }
+  render(renderer, writeBuffer, readBuffer) {
+    renderer.setRenderTarget(this.target); renderer.clear(); renderer.render(this.scene, this.camera);
+    renderer.setRenderTarget(this.renderToScreen ? null : readBuffer); this.copy.render(renderer);
+  }
+}
+const rt = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType });
 const composer = new EffectComposer(renderer, rt);
-composer.addPass(new RenderPass(scene, camera));
+composer.addPass(new MsaaRenderPass(scene, camera));
 const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.12, 0.4, 0.92);
 composer.addPass(bloom);
 const tiltH = new ShaderPass(HorizontalTiltShiftShader), tiltV = new ShaderPass(VerticalTiltShiftShader);
@@ -96,7 +132,8 @@ function applyViewOffset() {
 function resize() {
   const w = innerWidth, h = innerHeight;
   camera.aspect = w / h; camera.updateProjectionMatrix(); applyViewOffset();
-  renderer.setSize(w, h); composer.setSize(w, h); bloom.setSize(w, h);
+  renderer.setSize(w, h); composer.setSize(w, h);
+  bloom.setSize(Math.ceil(w * renderer.getPixelRatio() / 2), Math.ceil(h * renderer.getPixelRatio() / 2));   // faint glow: half-res mips are plenty
   tiltH.uniforms.h.value = 3.2 / w; tiltV.uniforms.v.value = 3.2 / h;
 }
 resize();
@@ -437,7 +474,7 @@ addEventListener('keydown', (e) => {
 controls.addEventListener('start', () => { controls.autoRotate = false; });
 
 // ---------- camera: rotate / tilt buttons, compass (north-up), keys Q/E rotate, R/F tilt, N north ----------
-// MapControls pans with the left button; dragging with the right button or Shift/Ctrl/⌘, or a two-finger twist, rotates.
+// Dragging pans (the ground follows the pointer); right/middle drag or Ctrl/⌘/Shift + drag rotates and tilts.
 const nudge = { az: 0, pol: 0 }, sph = new THREE.Spherical(), camOff = new THREE.Vector3();
 const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 function rotateView(daz, dpol = 0) {          // pending turn is capped, so a held key keeps a steady pace
@@ -831,13 +868,14 @@ function step(dt, now = performance.now()) {
     if (t >= 1) fly = null;
   }
   applyNudge(dt);
-  controls.update();
+  controls.update(dt);
   drawCompass();
   const dist = camera.position.distanceTo(controls.target);
   scene.fog.density = 0.000032 * THREE.MathUtils.clamp(18000 / dist, 0.04, 1);   // thin the haze for the island view
   const near = THREE.MathUtils.clamp(dist * 0.002, 5, 400);
   if (Math.abs(near - camera.near) / camera.near > 0.2) { camera.near = near; camera.far = Math.max(150000, dist * 5); camera.updateProjectionMatrix(); }
   weather.update(dt, camera, controls.target, dist, { sun, hemi, fog: scene.fog });
+  bloom.enabled = uniforms.uNight.value > 0.02;     // the faint glow only shows on night lights; ~15 ms in daylight for nothing
   camera.updateMatrixWorld();
   streamTiles(now);
   uniforms.uTime.value = now / 1000;

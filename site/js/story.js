@@ -8,7 +8,7 @@ import * as THREE from 'three';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
-import { t, pickLang } from './i18n.js';
+import { t, pickLang, lang } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
 const SLOW = 0.45, FAST = 2.6;                 // years per second inside / outside the change window
@@ -63,6 +63,7 @@ export class Story {
     this.app.refreshCity();
     this.render();
     $('story').hidden = false; $('creditsStory').hidden = false;
+    $('story').classList.remove('folded'); $('story').querySelector('button.fold')?.setAttribute('aria-expanded', 'true');
     $('storyPick').value = s.id;
     const u = new URL(location.href);
     for (const k of ['at', 'd', 'az', 'el', 'y']) u.searchParams.delete(k);
@@ -119,7 +120,7 @@ export class Story {
   buildings(force = false) {
     this.clearBuildings();
     const list = this.cur.buildings ?? [];
-    const labelled = new Set(list.filter(b => b.name && b.area >= 6000).slice(0, 10).map(b => b.id));
+    const labelled = new Set(list.filter(b => (lang === 'en' ? b.name_en : b.name) && b.area >= 6000).slice(0, 10).map(b => b.id));
     for (const b of list) {
       let ring = b.poly;
       if (ring.length > 1 && ring[0][0] === ring.at(-1)[0] && ring[0][1] === ring.at(-1)[1]) ring = ring.slice(0, -1);
@@ -135,7 +136,7 @@ export class Story {
       let label = null;
       if (labelled.has(b.id)) {
         label = document.createElement('div'); label.className = 'blabel' + (b.construction ? ' building' : '');
-        label.textContent = b.name.replace(/^台積電\s*|^TSMC\s*/i, '') + (b.construction ? ` · ${t('sUnderConstruction')}` : '');
+        label.textContent = (lang === 'en' && b.name_en ? b.name_en : b.name.replace(/^台積電\s*|^TSMC\s*/i, '')) + (b.construction ? ` · ${t('sUnderConstruction')}` : '');
         this.labels.appendChild(label);
       }
       const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length, cz = pts.reduce((a, p) => a + p[2], 0) / pts.length;
@@ -146,15 +147,18 @@ export class Story {
   // Every frame: grow buildings with the (continuous) year and place labels.
   tick(camera, yearF) {
     if (!this.cur || !this.blds.length) return;
-    const v = new THREE.Vector3(), w = innerWidth, h = innerHeight;
-    for (const o of this.blds) {
+    const v = new THREE.Vector3(), w = innerWidth, h = innerHeight, placed = [];
+    for (const o of this.blds) {                   // largest first: a label overlapping one already placed is hidden
       const g = THREE.MathUtils.smoothstep(yearF, o.b.year - 0.8, o.b.year + 0.2);
       o.mesh.visible = g > 0.001; o.mesh.scale.y = Math.max(g, 0.001);
       if (!o.label) continue;
       v.copy(o.top); v.y = o.mesh.position.y + (o.top.y - o.mesh.position.y) * g; v.project(camera);
-      const show = g > 0.6 && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      let show = g > 0.6 && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      const x = (v.x + 1) / 2 * w, y = (1 - v.y) / 2 * h, lw = (o.lw ??= o.label.offsetWidth || 80) / 2 + 3, lh = 22;
+      if (show && placed.some(r => Math.abs(r[0] - x) < r[2] + lw && Math.abs(r[1] - y) < lh)) show = false;
+      if (show) placed.push([x, y, lw]);
       o.label.hidden = !show;
-      if (show) o.label.style.transform = `translate(${((v.x + 1) / 2 * w).toFixed(0)}px, ${((1 - v.y) / 2 * h).toFixed(0)}px) translate(-50%, -100%)`;
+      if (show) o.label.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px) translate(-50%, -100%)`;
     }
   }
 

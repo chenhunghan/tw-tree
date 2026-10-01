@@ -43,6 +43,7 @@ const ZH = {
   sSources: '時間資料來源', sChartAria: '廠區與周邊的樹冠比例', sCopied: '已複製故事連結。',
   sNotFound: (id) => `找不到故事「${id}」。`, sLegendChange: '開發期間', sUnderConstruction: '興建中',
   langBtn: 'EN', langTitle: 'Switch to English',
+  expand: '展開', collapse: '收合',
 };
 
 const EN = {
@@ -74,6 +75,7 @@ const EN = {
   sSources: 'Sources for dates', sChartAria: 'Tree cover inside the site and around it', sCopied: 'Story link copied.',
   sNotFound: (id) => `No story called “${id}”.`, sLegendChange: 'clearing years', sUnderConstruction: 'under construction',
   langBtn: '中文', langTitle: '切換為中文',
+  expand: 'Expand', collapse: 'Collapse',
   lvl: { '完整地址': 'full address', '門牌': 'house number', '巷弄': 'lane', '路段': 'road section', '道路': 'road', '鄉鎮市區': 'district' },
 };
 
@@ -101,7 +103,7 @@ const DOM_EN = {
   fov: 'View', fovTitle: 'Field of view: small = telephoto, flat, miniature look; large = wide angle, deep perspective',
   tilt: 'Miniature', tiltTitle: 'Tilt-shift blur (M)', random: 'Random place', randomTitle: 'Fly to another random place where tree cover changed',
   about: 'Data & limits', camAria: 'Camera',
-  camTitle: 'Rotate: right-drag, Shift+drag or two-finger twist; pan: left-drag; zoom: wheel or pinch',
+  camTitle: 'Pan: drag the ground; rotate and tilt: right-drag, or hold Ctrl/⌘/Shift and drag (sideways rotates, up/down tilts); zoom: wheel or pinch (toward the pointer), double-click zooms in; touch: twist two fingers to rotate, slide two fingers up/down to tilt',
   rotL: 'Rotate left (Q)', compass: 'North up (N)', rotR: 'Rotate right (E)', tiltUp: 'Look down (R)', tiltDn: 'Look level (F)',
   minimap: 'Overview map: click to fly there', search: 'address search ©', loading: 'Loading tree-cover data…',
 };

@@ -14,7 +14,7 @@ year: OSM `start_date`; else the median GISA first-built year of the pixels unde
   of the site's tree-cover decline if the footprint was still treed (> 30 %) before it (a building cannot predate the
   clearing); else (built after GISA ends in 2021) the year the decline ended. Per-site floors from dated sources: FLOOR.
 """
-import argparse, gzip, json, pathlib, urllib.request
+import argparse, gzip, json, pathlib, re, urllib.request
 import numpy as np, pyarrow.ipc as ipc
 from pyproj import Transformer
 from shapely.geometry import Polygon
@@ -26,9 +26,23 @@ FLOOR = {'tsmc-fab22': 2023,   # refinery ground was impervious long before (GIS
          'tsmc-fab18': 2018,   # ground broken 26 January 2018
          'tsmc-fab20': 2023}   # leveling from spring 2022
 # named buildings inside an outline that are not the fab's own (fire station, a neighbour's HQ) are left out
-import re
 FAB_NAME = re.compile(r'台積|TSMC|Fab|F\d|P\d|CUP|AP\d|廠|工務所|公務所|辦公|Office|研發中心|棟', re.I)
 SKIP_TYPES = {'residential', 'house', 'apartments', 'dormitory', 'religious', 'temple', 'shrine', 'carport', 'roof', 'shed', 'greenhouse'}
+
+def english(name, tags):
+    """English label: OSM name:en, else the Chinese naming patterns of TSMC buildings (Fab 18 P3, AP6A, ...)."""
+    if tags.get('name:en'): return re.sub(r'\bFab(\d)', r'Fab \1', tags['name:en'])
+    n = re.sub(r'^\s*(台積電|台積|TSMC)\s*', '', name)
+    n = re.sub(r'先進封測(\S)廠', lambda m: 'Advanced Backend Fab ' + str('一二三四五六七八九'.index(m.group(1)) + 1) if m.group(1) in '一二三四五六七八九' else m.group(0), n)
+    n = re.sub(r'(\d+)廠\s*', r'Fab \1 ', n)
+    n = re.sub(r'(\w)棟', r'Building \1 ', n)
+    n = re.sub(r'\bF(\d+)([AB]?)\s*', r'Fab \1\2 ', n)
+    for zh, en in [('全球研發中心', 'Global R&D Center'), ('封測廠', 'Backend fab'), ('辦公室', ' office'), ('公務所', ' site office'),
+                   ('工務所', ' site office'), ('興建工程', ' (construction)'), ('南科', ''), ('棟', '')]:
+        n = n.replace(zh, en)
+    n = re.sub(r'\bFab(\d)', r'Fab \1', n)
+    n = re.sub(r'\s+', ' ', n).strip()
+    return n if not re.search(r'[\u4e00-\u9fff]', n) else ''
 
 ap = argparse.ArgumentParser()
 ap.add_argument('stories'); ap.add_argument('osm')
@@ -106,7 +120,7 @@ for st in doc['stories']:
         else:
             y, ys = st['change'][1], 'trees'
         if st['id'] in FLOOR and y < FLOOR[st['id']]: y, ys = FLOOR[st['id']], 'source'
-        out.append({'id': e['id'], 'name': name, 'h': round(h, 1), 'h_src': hs, 'year': y, 'year_src': ys,
+        out.append({'id': e['id'], 'name': name, 'name_en': english(name, t) if name else '', 'h': round(h, 1), 'h_src': hs, 'year': y, 'year_src': ys,
                     'construction': construction, 'area': round(area),
                     'poly': [[round(x, 6), round(y_, 6)] for x, y_ in ring]})
     out.sort(key=lambda b: -b['area'])

@@ -261,7 +261,27 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   en-* → en), else English. `index.html` is written in Chinese; elements with `data-i18n`, `-title`, `-ph`, `-aria`,
   `-content` keys are replaced in English, and the about dialog has a full `data-lang="en"` copy. Share and story links
   never carry `lang`. Nominatim gets `accept-language=en,zh-TW` in English.
-- **Camera (2026-09-29):** MapControls: left-drag pans; right-drag, Shift/Ctrl/⌘+drag or a two-finger twist rotates. A
+- **Rendering cost (2026-10-01):** the slow low oblique view was not the shadow map (that measurement was GPU noise
+  from another tab). Measured with WebGL timer queries (`EXT_disjoint_timer_query_webgl2`) at 1280×720 on the M2 Pro:
+  the logarithmic depth buffer (gl_FragDepth turns off early-z / Apple's hidden-surface removal) and post passes on
+  4× MSAA half-float targets were the cost. Now: reversed-Z depth (`reverseDepthBuffer`, needs `EXT_clip_control`;
+  `?depth=log` or no extension falls back to log depth); the scene renders into its own MSAA target, resolved once
+  (`MsaaRenderPass`), and post passes run single-sample; bloom runs at half resolution and only when `uNight` > 0.02
+  (in daylight nothing passes its threshold). Low oblique view GPU time ~106 → 7.7 ms (same session A/B: log depth
+  35 ms), 3.2 km view ~14 ms.
+- **Navigation (2026-10-01, `js/nav.js`, replaces MapControls):** Google-Maps style. Drag grabs the ground point under
+  the pointer (picked by marching the ray over the height data, then a plane at that height while dragging) and a
+  release coasts (velocity smoothed, ≤ 2 view distances/s). Right/middle drag or Ctrl/⌘/Shift+drag: sideways rotates,
+  up/down tilts, around the view centre. Wheel/pinch zooms toward the ground under the pointer (eased); double-click /
+  double-tap zooms in. Two fingers: twist rotates, moving both up/down tilts (detected per finger against the other's
+  last move within 100 ms). The pivot eases onto the ground; the camera never goes below ground + 45 m (tall conifers
+  ~40 m). Same API as before (target, update(dt), get*Angle, min/maxDistance, maxPolarAngle, autoRotate, events).
+- **Foldable panels (2026-10-01):** chevron buttons (`button.fold[data-fold]`) toggle `.folded` on their panel; CSS hides
+  `.fold-body` parts. Header details (weather, island stats, trend) and the timeline legend/FOV start folded; info is
+  open; choices persist in localStorage (`tpetree.fold.<name>`) except the story card, which always opens expanded
+  (folded it keeps the title and the live year/site/ring numbers). Story building labels use `name_en` in English
+  (OSM `name:en`, else derived from the Chinese pattern: 18廠P3 → Fab 18 P3) and skip labels that would overlap.
+- **Camera (2026-09-29):** (superseded by Navigation) MapControls: left-drag pans; right-drag, Shift/Ctrl/⌘+drag or a two-finger twist rotates. A
   control column (row on phones) adds rotate ±26°, tilt ±10°, and a compass that shows north and resets to north-up;
   keys Q/E rotate, R/F tilt, N north. Pending turns are eased and capped, so a held key keeps a steady pace.
 - **Display rule:** when a pixel has no clear observation in a year, the app shows its last observed value (leading gaps are back-filled from the first observation) and greys/stripes it. Stored data keeps 255. Area stats in the header use this filled series over the whole tile area (the pilot rectangle, not the city boundary).

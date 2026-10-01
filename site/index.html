@@ -66,6 +66,15 @@
   .ramp { width: 120px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--bare), #a3bd78 50%, var(--forest)); }
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 3px; }
 
+  /* foldable panels: a chevron button toggles .folded on its panel, which hides the .fold-body parts */
+  .panel.folded .fold-body { display: none !important; }
+  button.fold { border: none; background: none; padding: 2px 4px; color: var(--muted); line-height: 0; }
+  button.fold svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
+  .panel.folded button.fold svg { transform: rotate(-90deg); }
+  header.panel > button.fold { position: absolute; top: 10px; right: 8px; }
+  header.panel h1 { padding-right: 26px; }
+  .h2-btns { display: flex; align-items: center; gap: 2px; }
+  #timeline.folded .legend { margin-top: 2px; }
   #side { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: min(340px, calc(100vw - 24px)); max-height: calc(100vh - 190px); overflow: auto; display: flex; flex-direction: column; gap: 10px; z-index: 2; }
   #side > .panel { position: static; }
   #info, #story { padding: 12px 14px; font-size: 12.5px; box-sizing: border-box; }
@@ -77,7 +86,10 @@
   #storyNow .phase { margin-left: auto; padding: 2px 8px; border-radius: 9px; background: #e6efe2; color: var(--accent); font-size: 12px; }
   #storyNow .phase.change { background: #f6e3d3; color: var(--loss); }
   #storyChart { width: 100%; height: 92px; display: block; margin-top: 6px; }
-  #storyLabels { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+  #storyLabels { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
+  .panel { z-index: 2; }
+  #searchStatus:empty { display: none; }
+  @media (min-width: 641px) { body:has(#side > .panel:not([hidden])) #cam { right: calc(24px + min(340px, 100vw - 24px)); } }
   .blabel { position: absolute; left: 0; top: 0; padding: 2px 7px; border-radius: 7px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
     background: rgba(250, 250, 245, 0.9); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 2px 8px rgba(20, 40, 30, 0.15); }
   .blabel.building { color: var(--loss); }
@@ -129,6 +141,7 @@
 <div id="scene"></div>
 
 <header class="panel">
+  <button type="button" class="fold" data-fold="header" data-default="folded" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
   <h1><span data-i18n="h1">臺灣樹冠時光機</span><small>1984–2026 · <span id="regionName" data-i18n="pilot">臺北試行版</span></small></h1>
   <form class="search" id="searchForm" autocomplete="off">
     <input id="q" type="search" data-i18n-ph="q" data-i18n-aria="qAria" placeholder="地址、地標或座標，例：臺北101、25.0339, 121.5645" aria-label="搜尋地點">
@@ -137,6 +150,7 @@
     <button type="button" id="share" data-i18n="share" data-i18n-title="shareTitle" title="複製目前視角（位置、方向、年份）的連結">分享</button>
   </form>
   <div id="searchStatus"></div>
+  <div class="fold-body">
   <div class="wx" data-i18n-aria="wxAria" aria-label="天氣（裝飾用）">
     <span class="wx-label" data-i18n="wx" data-i18n-title="wxTitle" title="天氣與時間只是畫面效果，不是實際資料">天氣</span>
     <button type="button" data-wx="clear" data-i18n="clear">晴</button><button type="button" data-wx="cloudy" data-i18n="cloudy">多雲</button><button type="button" data-wx="rain" data-i18n="rain">雨</button>
@@ -153,25 +167,26 @@
     <svg id="trend" viewBox="0 0 300 46" preserveAspectRatio="none" role="img" data-i18n-aria="trendAria" aria-label="樹冠與建成區面積趨勢"></svg>
     <div class="trend-legend"><span><i style="background:var(--forest)"></i><span data-i18n="trendTree">樹冠</span> <span id="trendTree"></span></span><span><i style="background:#8c8c86"></i><span data-i18n="trendBuilt">建成區</span> <span id="trendBuilt"></span></span></div>
   </div>
+  </div>
 </header>
 
 <div id="side">
 <aside class="panel" id="story" hidden aria-live="polite">
-  <h2><span id="storyTitle"></span><button class="close" id="storyClose" data-i18n-aria="close" aria-label="關閉">×</button></h2>
-  <div class="note" id="storyPlace"></div>
-  <p id="storyCtx"></p>
+  <h2><span id="storyTitle"></span><span class="h2-btns"><button type="button" class="fold" data-fold="story" data-default="open" data-persist="no" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><button class="close" id="storyClose" data-i18n-aria="close" aria-label="關閉">×</button></span></h2>
+  <div class="note fold-body" id="storyPlace"></div>
+  <p id="storyCtx" class="fold-body"></p>
   <div id="storyNow"></div>
-  <svg id="storyChart" viewBox="0 0 300 92" preserveAspectRatio="none" role="img"></svg>
-  <div class="trend-legend" id="storyLegend"></div>
-  <p id="storySummary"></p>
-  <div class="story-actions"><button type="button" id="storyReplay" class="primary"></button><button type="button" id="storyShare"></button>
+  <svg id="storyChart" class="fold-body" viewBox="0 0 300 92" preserveAspectRatio="none" role="img"></svg>
+  <div class="trend-legend fold-body" id="storyLegend"></div>
+  <p id="storySummary" class="fold-body"></p>
+  <div class="story-actions fold-body"><button type="button" id="storyReplay" class="primary"></button><button type="button" id="storyShare"></button>
     <select id="storyPick"></select></div>
-  <p class="note" id="storyNote"></p>
-  <p class="note" id="storySrc"></p>
+  <p class="note fold-body" id="storyNote"></p>
+  <p class="note fold-body" id="storySrc"></p>
 </aside>
 <aside class="panel" id="info" hidden>
-  <h2><span data-i18n="info">這個位置</span><button class="close" id="infoClose" data-i18n-aria="close" aria-label="關閉">×</button></h2>
-  <div id="infoBody"></div>
+  <h2><span data-i18n="info">這個位置</span><span class="h2-btns"><button type="button" class="fold" data-fold="info" data-default="open" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><button class="close" id="infoClose" data-i18n-aria="close" aria-label="關閉">×</button></span></h2>
+  <div id="infoBody" class="fold-body"></div>
 </aside>
 </div>
 
@@ -186,14 +201,14 @@
     </div>
   </div>
   <div class="legend">
-    <span data-i18n="legendFrac">樹冠比例</span><span>0%</span><span class="ramp"></span><span>100%</span>
-    <span><i class="sw" style="background:#9a9a9a"></i><span data-i18n="legendNoObs">當年無清晰觀測（沿用前一次）</span></span>
-    <span><i class="sw" style="background:var(--loss)"></i><span data-i18n="legendLoss">樹冠減少中</span></span>
-    <span style="margin-left:auto; display:flex; gap:6px; align-items:center"><label class="fov" data-i18n-title="fovTitle" title="視角（FOV）：小＝望遠、扁平的迷你感；大＝廣角、景深強"><span data-i18n="fov">視角</span> <input id="fov" type="range" min="15" max="75" step="1" value="34"> <output id="fovVal">34°</output></label><button id="tilt" type="button" data-i18n="tilt" data-i18n-title="tiltTitle" title="移軸模糊（M）">迷你世界</button><button id="randomBtn" type="button" data-i18n="random" data-i18n-title="randomTitle" title="飛到另一個樹冠有變化的隨機地點">隨機地點</button><button id="aboutBtn" type="button" data-i18n="about">資料與限制</button><button id="langBtn" type="button">EN</button></span>
+    <span class="fold-body" data-i18n="legendFrac">樹冠比例</span><span class="fold-body">0%</span><span class="ramp fold-body"></span><span class="fold-body">100%</span>
+    <span class="fold-body"><i class="sw" style="background:#9a9a9a"></i><span data-i18n="legendNoObs">當年無清晰觀測（沿用前一次）</span></span>
+    <span class="fold-body"><i class="sw" style="background:var(--loss)"></i><span data-i18n="legendLoss">樹冠減少中</span></span>
+    <span style="margin-left:auto; display:flex; gap:6px; align-items:center"><label class="fov fold-body" data-i18n-title="fovTitle" title="視角（FOV）：小＝望遠、扁平的迷你感；大＝廣角、景深強"><span data-i18n="fov">視角</span> <input id="fov" type="range" min="15" max="75" step="1" value="34"> <output id="fovVal">34°</output></label><button id="tilt" type="button" data-i18n="tilt" data-i18n-title="tiltTitle" title="移軸模糊（M）">迷你世界</button><button id="randomBtn" type="button" data-i18n="random" data-i18n-title="randomTitle" title="飛到另一個樹冠有變化的隨機地點">隨機地點</button><button id="aboutBtn" type="button" data-i18n="about">資料與限制</button><button id="langBtn" type="button">EN</button><button type="button" class="fold" data-fold="timeline" data-default="folded" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></span>
   </div>
 </section>
 
-<div id="cam" class="panel" role="group" data-i18n-aria="camAria" aria-label="鏡頭" data-i18n-title="camTitle" title="旋轉：右鍵拖曳、Shift＋拖曳或兩指轉動；平移：左鍵拖曳；縮放：滾輪或兩指捏合">
+<div id="cam" class="panel" role="group" data-i18n-aria="camAria" aria-label="鏡頭" data-i18n-title="camTitle" title="平移：拖曳地面；旋轉與傾斜：右鍵拖曳，或按住 Ctrl／⌘／Shift 拖曳（左右旋轉、上下傾斜）；縮放：滾輪或兩指捏合（朝游標處），雙擊放大；觸控：兩指轉動旋轉、兩指上下滑動傾斜">
   <button id="rotL" type="button" data-i18n-aria="rotL" data-i18n-title="rotL" aria-label="向左旋轉" title="向左旋轉（Q）"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg></button>
   <button id="compass" type="button" data-i18n-aria="compass" data-i18n-title="compass" aria-label="朝北" title="朝北（N）"><svg viewBox="0 0 24 24"><path d="M12 3l3.5 9h-7z" fill="#c0392b" stroke="#c0392b"/><path d="M12 21l3.5-9h-7z" fill="#b8b8b0" stroke="#b8b8b0"/></svg></button>
   <button id="rotR" type="button" data-i18n-aria="rotR" data-i18n-title="rotR" aria-label="向右旋轉" title="向右旋轉（E）"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg></button>
