@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>臺灣樹冠時光機</title>
-<meta name="description" content="1984–2026 年臺灣樹冠覆蓋的 3D 時間軸，資料來自 Landsat 衛星。">
+<meta name="description" data-i18n-content="desc" content="1984–2026 年臺灣樹冠覆蓋的 3D 時間軸，資料來自 Landsat 衛星。">
 <script type="importmap">
 {
   "imports": {
@@ -66,7 +66,19 @@
   .ramp { width: 120px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--bare), #a3bd78 50%, var(--forest)); }
   .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: -1px; margin-right: 3px; }
 
-  #info { top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: min(320px, calc(100vw - 24px)); padding: 12px 14px; font-size: 12.5px; box-sizing: border-box; max-height: calc(100vh - 190px); overflow: auto; }
+  #side { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: min(340px, calc(100vw - 24px)); max-height: calc(100vh - 190px); overflow: auto; display: flex; flex-direction: column; gap: 10px; z-index: 2; }
+  #side > .panel { position: static; }
+  #info, #story { padding: 12px 14px; font-size: 12.5px; box-sizing: border-box; }
+  #story h2 { font-size: 15px; margin: 0 0 2px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  #story .close { border: none; background: none; font-size: 18px; padding: 0 4px; }
+  #story p { margin: 6px 0; line-height: 1.55; }
+  #storyNow { display: flex; gap: 14px; align-items: baseline; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  #storyNow b { display: block; font-size: 20px; color: var(--ink); font-variant-numeric: tabular-nums; }
+  #storyNow .phase { margin-left: auto; padding: 2px 8px; border-radius: 9px; background: #e6efe2; color: var(--accent); font-size: 12px; }
+  #storyNow .phase.change { background: #f6e3d3; color: var(--loss); }
+  #storyChart { width: 100%; height: 92px; display: block; margin-top: 6px; }
+  .story-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+  .story-actions select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: #fff; min-width: 0; flex: 1; }
   #info h2 { font-size: 14px; margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; }
   #info .close { border: none; background: none; font-size: 18px; padding: 0 4px; }
   #info dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 6px 0; }
@@ -97,7 +109,14 @@
     #yearLabel { font-size: 26px; } #play { width: 38px; height: 38px; }
     #credits { bottom: calc(160px + env(safe-area-inset-bottom, 0px)); }
     #minimap { display: none; }
-    #info { top: auto; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); max-height: 40vh; }
+    #side { top: auto; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); max-height: 42vh; }
+    #storyCtx, #storyNote, #storySrc { display: none; }
+    /* story on a phone: keep the scene visible between the header and the card */
+    body.story-mode header .wx, body.story-mode header .stat, body.story-mode header #trendBox, body.story-mode #cam { display: none; }
+    body.story-mode #timeline .legend > span:not(:last-child) { display: none; }
+    body.story-mode #side { bottom: calc(118px + env(safe-area-inset-bottom, 0px)); max-height: 46vh; }
+    body.story-mode #credits { display: none; }
+    #storyChart { height: 64px; }
     .stat { gap: 10px; }
   }
 </style>
@@ -106,74 +125,90 @@
 <div id="scene"></div>
 
 <header class="panel">
-  <h1>臺灣樹冠時光機<small>1984–2026 · <span id="regionName">臺北試行版</span></small></h1>
+  <h1><span data-i18n="h1">臺灣樹冠時光機</span><small>1984–2026 · <span id="regionName" data-i18n="pilot">臺北試行版</span></small></h1>
   <form class="search" id="searchForm" autocomplete="off">
-    <input id="q" type="search" placeholder="地址、地標或座標，例：臺北101、25.0339, 121.5645" aria-label="搜尋地點">
-    <button class="primary" type="submit">前往</button>
-    <button type="button" id="gps" title="使用裝置定位">我的位置</button>
-    <button type="button" id="share" title="複製目前視角（位置、方向、年份）的連結">分享</button>
+    <input id="q" type="search" data-i18n-ph="q" data-i18n-aria="qAria" placeholder="地址、地標或座標，例：臺北101、25.0339, 121.5645" aria-label="搜尋地點">
+    <button class="primary" type="submit" data-i18n="go">前往</button>
+    <button type="button" id="gps" data-i18n="gps" data-i18n-title="gpsTitle" title="使用裝置定位">我的位置</button>
+    <button type="button" id="share" data-i18n="share" data-i18n-title="shareTitle" title="複製目前視角（位置、方向、年份）的連結">分享</button>
   </form>
   <div id="searchStatus"></div>
-  <div class="wx" aria-label="天氣（裝飾用）">
-    <span class="wx-label" title="天氣與時間只是畫面效果，不是實際資料">天氣</span>
-    <button type="button" data-wx="clear">晴</button><button type="button" data-wx="cloudy">多雲</button><button type="button" data-wx="rain">雨</button>
-    <label class="fov" title="一天中的時間">時間 <input id="hour" type="range" min="0" max="23.99" step="0.05" value="7.5"> <output id="hourVal">07:30</output></label>
-    <button type="button" id="autoTime" title="時間自動流動（白天約 3.5 分鐘，夜晚較快）">自動</button>
+  <div class="wx" data-i18n-aria="wxAria" aria-label="天氣（裝飾用）">
+    <span class="wx-label" data-i18n="wx" data-i18n-title="wxTitle" title="天氣與時間只是畫面效果，不是實際資料">天氣</span>
+    <button type="button" data-wx="clear" data-i18n="clear">晴</button><button type="button" data-wx="cloudy" data-i18n="cloudy">多雲</button><button type="button" data-wx="rain" data-i18n="rain">雨</button>
+    <label class="fov" data-i18n-title="hourTitle" title="一天中的時間"><span data-i18n="hour">時間</span> <input id="hour" type="range" min="0" max="23.99" step="0.05" value="7.5"> <output id="hourVal">07:30</output></label>
+    <button type="button" id="autoTime" data-i18n="autoTime" data-i18n-title="autoTimeTitle" title="時間自動流動（白天約 3.5 分鐘，夜晚較快）">自動</button>
   </div>
   <div class="stat">
-    <div>樹冠面積<b id="statArea">—</b></div>
-    <div>相較 <span id="statBaseYear">1984</span><b id="statDelta">—</b></div>
-    <div>當年影像<b id="statScenes">—</b></div>
-    <div id="statBuiltBox" hidden>建成區<b id="statBuilt">—</b></div>
+    <div><span data-i18n="statArea">樹冠面積</span><b id="statArea">—</b></div>
+    <div><span data-i18n="statVs">相較</span> <span id="statBaseYear">1984</span><b id="statDelta">—</b></div>
+    <div><span data-i18n="statScenes">當年影像</span><b id="statScenes">—</b></div>
+    <div id="statBuiltBox" hidden><span data-i18n="statBuilt">建成區</span><b id="statBuilt">—</b></div>
   </div>
   <div id="trendBox" hidden>
-    <svg id="trend" viewBox="0 0 300 46" preserveAspectRatio="none" role="img" aria-label="樹冠與建成區面積趨勢"></svg>
-    <div class="trend-legend"><span><i style="background:var(--forest)"></i>樹冠 <span id="trendTree"></span></span><span><i style="background:#8c8c86"></i>建成區 <span id="trendBuilt"></span></span></div>
+    <svg id="trend" viewBox="0 0 300 46" preserveAspectRatio="none" role="img" data-i18n-aria="trendAria" aria-label="樹冠與建成區面積趨勢"></svg>
+    <div class="trend-legend"><span><i style="background:var(--forest)"></i><span data-i18n="trendTree">樹冠</span> <span id="trendTree"></span></span><span><i style="background:#8c8c86"></i><span data-i18n="trendBuilt">建成區</span> <span id="trendBuilt"></span></span></div>
   </div>
 </header>
 
+<div id="side">
+<aside class="panel" id="story" hidden aria-live="polite">
+  <h2><span id="storyTitle"></span><button class="close" id="storyClose" data-i18n-aria="close" aria-label="關閉">×</button></h2>
+  <div class="note" id="storyPlace"></div>
+  <p id="storyCtx"></p>
+  <div id="storyNow"></div>
+  <svg id="storyChart" viewBox="0 0 300 92" preserveAspectRatio="none" role="img"></svg>
+  <div class="trend-legend" id="storyLegend"></div>
+  <p id="storySummary"></p>
+  <div class="story-actions"><button type="button" id="storyReplay" class="primary"></button><button type="button" id="storyShare"></button>
+    <select id="storyPick"></select></div>
+  <p class="note" id="storyNote"></p>
+  <p class="note" id="storySrc"></p>
+</aside>
 <aside class="panel" id="info" hidden>
-  <h2><span>這個位置</span><button class="close" id="infoClose" aria-label="關閉">×</button></h2>
+  <h2><span data-i18n="info">這個位置</span><button class="close" id="infoClose" data-i18n-aria="close" aria-label="關閉">×</button></h2>
   <div id="infoBody"></div>
 </aside>
+</div>
 
-<section class="panel" id="timeline" aria-label="時間軸">
+<section class="panel" id="timeline" data-i18n-aria="timeline" aria-label="時間軸">
   <div class="tl-row">
-    <button id="play" aria-label="播放/暫停">❚❚</button>
+    <button id="play" data-i18n-aria="play" aria-label="播放/暫停">❚❚</button>
     <div id="yearLabel">1984</div>
     <div class="tl-track">
-      <input id="slider" type="range" min="0" max="1" step="0.001" value="0" aria-label="年份">
-      <div id="bars" title="每年可用的 Landsat 影像數（橘色：少於 5 景，低信心）"></div>
+      <input id="slider" type="range" min="0" max="1" step="0.001" value="0" data-i18n-aria="slider" aria-label="年份">
+      <div id="bars" data-i18n-title="bars" title="每年可用的 Landsat 影像數（橘色：少於 5 景，低信心）"></div>
       <div id="ticks"></div>
     </div>
   </div>
   <div class="legend">
-    <span>樹冠比例</span><span>0%</span><span class="ramp"></span><span>100%</span>
-    <span><i class="sw" style="background:#9a9a9a"></i>當年無清晰觀測（沿用前一次）</span>
-    <span><i class="sw" style="background:var(--loss)"></i>樹冠減少中</span>
-    <span style="margin-left:auto; display:flex; gap:6px; align-items:center"><label class="fov" title="視角（FOV）：小＝望遠、扁平的迷你感；大＝廣角、景深強">視角 <input id="fov" type="range" min="15" max="75" step="1" value="34"> <output id="fovVal">34°</output></label><button id="tilt" type="button" title="移軸模糊（M）">迷你世界</button><button id="randomBtn" type="button" title="飛到另一個樹冠有變化的隨機地點">隨機地點</button><button id="aboutBtn" type="button">資料與限制</button></span>
+    <span data-i18n="legendFrac">樹冠比例</span><span>0%</span><span class="ramp"></span><span>100%</span>
+    <span><i class="sw" style="background:#9a9a9a"></i><span data-i18n="legendNoObs">當年無清晰觀測（沿用前一次）</span></span>
+    <span><i class="sw" style="background:var(--loss)"></i><span data-i18n="legendLoss">樹冠減少中</span></span>
+    <span style="margin-left:auto; display:flex; gap:6px; align-items:center"><label class="fov" data-i18n-title="fovTitle" title="視角（FOV）：小＝望遠、扁平的迷你感；大＝廣角、景深強"><span data-i18n="fov">視角</span> <input id="fov" type="range" min="15" max="75" step="1" value="34"> <output id="fovVal">34°</output></label><button id="tilt" type="button" data-i18n="tilt" data-i18n-title="tiltTitle" title="移軸模糊（M）">迷你世界</button><button id="randomBtn" type="button" data-i18n="random" data-i18n-title="randomTitle" title="飛到另一個樹冠有變化的隨機地點">隨機地點</button><button id="aboutBtn" type="button" data-i18n="about">資料與限制</button><button id="langBtn" type="button">EN</button></span>
   </div>
 </section>
 
-<div id="cam" class="panel" role="group" aria-label="鏡頭" title="旋轉：右鍵拖曳、Shift＋拖曳或兩指轉動；平移：左鍵拖曳；縮放：滾輪或兩指捏合">
-  <button id="rotL" type="button" aria-label="向左旋轉" title="向左旋轉（Q）"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg></button>
-  <button id="compass" type="button" aria-label="朝北" title="朝北（N）"><svg viewBox="0 0 24 24"><path d="M12 3l3.5 9h-7z" fill="#c0392b" stroke="#c0392b"/><path d="M12 21l3.5-9h-7z" fill="#b8b8b0" stroke="#b8b8b0"/></svg></button>
-  <button id="rotR" type="button" aria-label="向右旋轉" title="向右旋轉（E）"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg></button>
-  <button id="tiltUp" type="button" aria-label="俯視" title="俯視（R）"><svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg></button>
-  <button id="tiltDn" type="button" aria-label="平視" title="平視（F）"><svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg></button>
+<div id="cam" class="panel" role="group" data-i18n-aria="camAria" aria-label="鏡頭" data-i18n-title="camTitle" title="旋轉：右鍵拖曳、Shift＋拖曳或兩指轉動；平移：左鍵拖曳；縮放：滾輪或兩指捏合">
+  <button id="rotL" type="button" data-i18n-aria="rotL" data-i18n-title="rotL" aria-label="向左旋轉" title="向左旋轉（Q）"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg></button>
+  <button id="compass" type="button" data-i18n-aria="compass" data-i18n-title="compass" aria-label="朝北" title="朝北（N）"><svg viewBox="0 0 24 24"><path d="M12 3l3.5 9h-7z" fill="#c0392b" stroke="#c0392b"/><path d="M12 21l3.5-9h-7z" fill="#b8b8b0" stroke="#b8b8b0"/></svg></button>
+  <button id="rotR" type="button" data-i18n-aria="rotR" data-i18n-title="rotR" aria-label="向右旋轉" title="向右旋轉（E）"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg></button>
+  <button id="tiltUp" type="button" data-i18n-aria="tiltUp" data-i18n-title="tiltUp" aria-label="俯視" title="俯視（R）"><svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg></button>
+  <button id="tiltDn" type="button" data-i18n-aria="tiltDn" data-i18n-title="tiltDn" aria-label="平視" title="平視（F）"><svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg></button>
 </div>
 
-<canvas id="minimap" class="panel" hidden title="小地圖：點一下飛過去" aria-label="小地圖"></canvas>
+<canvas id="minimap" class="panel" hidden data-i18n-title="minimap" data-i18n-aria="minimap" title="小地圖：點一下飛過去" aria-label="小地圖"></canvas>
 
 <div class="panel" id="credits">
-  Landsat: USGS · ESA WorldCover 2021 (CC BY 4.0) · Copernicus DEM · GISA (CC BY 4.0) · JRC GHSL · 地址搜尋 ©
+  Landsat: USGS · ESA WorldCover 2021 (CC BY 4.0) · Copernicus DEM · GISA (CC BY 4.0) · JRC GHSL<span id="creditsStory" hidden> · TSMC site outlines ©
+  <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> (ODbL)</span> · <span data-i18n="search">地址搜尋 ©</span>
   <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (Nominatim)
 </div>
 
-<div id="loading"><div>載入樹冠資料…<div class="bar"><i id="loadBar"></i></div><div id="loadMsg" class="note" style="margin-top:8px"></div></div></div>
+<div id="loading"><div><span data-i18n="loading">載入樹冠資料…</span><div class="bar"><i id="loadBar"></i></div><div id="loadMsg" class="note" style="margin-top:8px"></div></div></div>
 
 <dialog id="about">
-  <div class="body">
+  <div class="body" data-lang="zh">
     <h2>資料與限制</h2>
     <p>每個 30 公尺像元的樹冠比例，由 Landsat 4、5、7、8、9 衛星影像（USGS Collection 2 Level-2，Tier 1）逐年估計。畫面上的樹是示意：數量與樹冠比例成正比，不代表實際的單株樹木；樹種依海拔帶與都市環境隨機配置，樹葉由程式繪製；濃密森林的樹下另畫示意的林下灌木。鏡頭附近幾公里內畫出立體的樹，更遠處的森林以地面上的樹冠紋理與約 13 公尺的樹冠高度表現（同樣依樹冠比例）；電腦較慢時，立體樹的範圍會自動縮小以維持流暢。</p>
     <h3>怎麼算的</h3>
@@ -197,6 +232,7 @@
       <li>天氣、雲、風、雨與日夜只是畫面效果，不是實際氣象資料；雲影也不影響樹冠數值。</li>
       <li><b>建築物是示意：</b>某像元在 GISA 資料中第一次成為不透水面（建成）的那一年，建築才會長出來；數量依 GHSL 2018 的建成面積比例，高度依 GHSL 2018 的建物高度，位置與形狀是程式產生的，不是真實建物輪廓。GISA 只記錄「第一次建成」，所以拆除、改建或都市綠化不會顯示；2021 年以後新建的也還沒有。夜間燈光同樣只是示意。</li>
       <li>地址搜尋使用 OpenStreetMap 的 Nominatim；臺灣門牌資料不完整，找不到時會逐步退到巷弄、路段或行政區，並顯示達到的精度。</li>
+      <li><b>廠區故事</b>（含 <code>?story=</code> 的連結）是把同一套樹冠比例，平均到 OpenStreetMap 的廠區範圍與其周邊環帶；文中的興建日期來自所列的新聞與公司資料。</li>
     </ul>
     <h3>來源</h3>
     <ul>
@@ -205,11 +241,48 @@
       <li>建成年份：GISA 1972–2021（Ren, Huang, Yang &amp; Zhou 2025, ISPRS J. Photogramm. Remote Sens. 220），CC BY 4.0</li>
       <li>建物高度與建成面積：JRC GHSL P2023A（GHS-BUILT-H 2018、GHS-BUILT-S 2018 10 m），European Commission, Joint Research Centre</li>
       <li>Copernicus DEM GLO-30 © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA</li>
-      <li>地址搜尋：Nominatim / © OpenStreetMap contributors（ODbL）</li>
+      <li>地址搜尋與廠區範圍：Nominatim / © OpenStreetMap contributors（ODbL）</li>
     </ul>
     <p class="note">資料檔（Apache Arrow）每個像元都帶有 UTM 座標與來源影像索引，可用 Python（polars、pyarrow、DuckDB）直接開啟。</p>
   </div>
-  <footer><button id="aboutClose" class="primary">關閉</button></footer>
+  <div class="body" data-lang="en" lang="en" hidden>
+    <h2>Data &amp; limits</h2>
+    <p>Tree cover (the share of each 30 m pixel covered by tree canopy) is estimated year by year from Landsat 4, 5, 7, 8 and 9 imagery (USGS Collection 2 Level-2, Tier 1). The trees on screen are illustrative: their number follows the tree cover, not real individual trees. Species are assigned at random by elevation band and urban setting, the foliage is drawn by code, and dense forest gets an illustrative shrub layer. Within a few kilometres of the camera the trees are 3D; farther away the forest is drawn as a canopy texture on the ground with a canopy height of about 13 m (also following tree cover). On slower computers the 3D tree radius shrinks automatically to keep things smooth.</p>
+    <h3>How it is computed</h3>
+    <ul>
+      <li>For each year and pixel, one real observation is kept (a medoid composite), so every value can be traced to a single original scene and pixel. Click the ground to see the source scene ID.</li>
+      <li>Pixels stay on the native Landsat grid (UTM, pixel centres at multiples of 30 m) and are never resampled.</li>
+      <li>The tree-cover model uses the tree class of ESA WorldCover 2021 as its reference and is trained on 2021 imagery. On held-out blocks it agrees with that reference at <span id="metricR2en">R² ≈ 0.71</span>. That measures agreement with the reference, not accuracy checked on the ground.</li>
+      <li>Landsat 5 is first calibrated to Landsat 7 with coefficients fitted on overlapping years in Taiwan, then harmonised to Landsat 8 with the Roy et al. (2016) coefficients; the model is trained on Landsat 8 only.</li>
+      <li><b>Yearly normalisation (island data):</b> stable closed forest and long-term treeless open land should look the same every year. For each tile and year, the median reflectance of these two kinds of pixel is aligned to the tile's 2021 values (the model's training year), and that correction is applied to the whole tile before tree cover is computed. Penghu, Kinmen and Matsu do not have enough reference pixels and are not normalised.</li>
+    </ul>
+    <h3>Limits</h3>
+    <ul>
+      <li>There is no usable imagery over Taipei for 1982, 1983 or 1985; 1984 and 1986 have only 3 scenes and are low-confidence years (marked orange on the timeline).</li>
+      <li>The raw imagery's geolocation error is about 12 m (RMSE), so features can shift by less than a pixel between years.</li>
+      <li><b>Sensor calibration (version 2):</b> same-year, same-pixel comparisons showed Landsat 5 (TM) reading about 4.9 points lower than Landsat 7. Version 2 adds a TM→ETM+ correction fitted on overlapping years in northern Taiwan, which brings the gap to about −0.4. The step around 1999 shrank from +6,470 ha to +2,660 ha.</li>
+      <li><b>Image drift between years (normalised):</b> without normalisation, stable forest rises from about 80% in 1987–98 to about 91% in 2022–26 (most visibly in the north after 2013). That is the model reading year-to-year changes in the imagery (haze, the mix of seasons) as more canopy, not new trees. It also pushes island land tree cover from 65.2% to 72.4%, and to 75.3% in 2022 alone. After normalisation it is 66.7% → 69.3%; 2022 matches 2021 (70.5% / 70.3%), and the 2016–2025 trend agrees with the independent Sentinel-2 tree probability (Dynamic World). Remaining limits: stable forest still reads about 4 points lower in 1987–98 than after 2014, and the normalisation also flattens some real regional year-to-year variation, so regional changes of a few points in a single year should not be read as real gains or losses. You can open the <a href="?data=https://huggingface.co/datasets/chenhunghan/tw-tree/resolve/main/taiwan_raw/">non-normalised version</a> to compare.</li>
+      <li>The model is trained on 2021 only. Applying it to the 1980s–90s assumes the spectral relationships have not changed; it has not been independently validated against dated high-resolution imagery.</li>
+      <li>A 30 m pixel is about 0.09 ha, so most street trees are smaller than a pixel; tree cover is the canopy share inside each pixel.</li>
+      <li>Where a pixel has no clear observation in a year, the previous observation is shown with grey stripes; it is never counted as a change in tree cover.</li>
+      <li>Terrain heights come from the Copernicus DEM GLO-30, are for display only, and are exaggerated 1.5×.</li>
+      <li>Weather, clouds, wind, rain and day/night are visual effects only, not weather data; cloud shadows do not affect tree-cover values.</li>
+      <li><b>Buildings are illustrative:</b> buildings rise in the year a pixel first becomes impervious (built) in the GISA data. Their number follows the GHSL 2018 built-up share and their height the GHSL 2018 building height; positions and shapes are generated, not real footprints. GISA records only first construction, so demolition, rebuilding and urban greening are not shown, and buildings after 2021 are not there yet. Night lights are illustrative too.</li>
+      <li>Address search uses OpenStreetMap's Nominatim. House numbers in Taiwan are incomplete, so when one is not found the search falls back to the lane, road section or district and says how precise the result is.</li>
+      <li><b>Site stories</b> (links with <code>?story=</code>) average the same tree-cover values over a site outline from OpenStreetMap and over a ring around it; construction dates in the text come from the cited news and company sources.</li>
+    </ul>
+    <h3>Sources</h3>
+    <ul>
+      <li>Landsat Collection 2 Level-2 courtesy of the U.S. Geological Survey (processed in Google Earth Engine)</li>
+      <li>ESA WorldCover 2021 v200, CC BY 4.0</li>
+      <li>Year first built: GISA 1972–2021 (Ren, Huang, Yang &amp; Zhou 2025, ISPRS J. Photogramm. Remote Sens. 220), CC BY 4.0</li>
+      <li>Building height and built-up share: JRC GHSL P2023A (GHS-BUILT-H 2018, GHS-BUILT-S 2018 10 m), European Commission, Joint Research Centre</li>
+      <li>Copernicus DEM GLO-30 © DLR e.V. 2010–2014 and © Airbus Defence and Space GmbH 2014–2018, provided under COPERNICUS by the European Union and ESA</li>
+      <li>Address search and site outlines: Nominatim / © OpenStreetMap contributors (ODbL)</li>
+    </ul>
+    <p class="note">The data files (Apache Arrow) carry the UTM coordinates and source scene index of every pixel and open directly in Python (polars, pyarrow, DuckDB).</p>
+  </div>
+  <footer><button id="aboutClose" class="primary" data-i18n="close">關閉</button></footer>
 </dialog>
 
 <script type="module" src="./js/app.js"></script>

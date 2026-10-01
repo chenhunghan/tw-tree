@@ -58,12 +58,12 @@ export function parseCoords(text) {
 
 // Nominatim: at most one request per second, no autocomplete, attribution shown in the UI.
 let lastCall = 0;
-async function nominatim(q) {
+async function nominatim(q, lang) {
   const wait = Math.max(0, lastCall + 1100 - Date.now());
   if (wait) await new Promise(r => setTimeout(r, wait));
   lastCall = Date.now();
   const u = new URL('https://nominatim.openstreetmap.org/search');
-  u.search = new URLSearchParams({ q, format: 'jsonv2', countrycodes: 'tw', limit: '1', 'accept-language': 'zh-TW' });
+  u.search = new URLSearchParams({ q, format: 'jsonv2', countrycodes: 'tw', limit: '1', 'accept-language': lang === 'en' ? 'en,zh-TW' : 'zh-TW' });
   const r = await fetch(u);
   if (!r.ok) throw new Error(`Nominatim ${r.status}`);
   return (await r.json())[0] || null;
@@ -79,14 +79,14 @@ const STEPS = [
   [s => (s.match(/^.*?[縣市].*?[區鄉鎮市]/) || [''])[0], '鄉鎮市區'],
 ];
 
-export async function geocode(text) {
+export async function geocode(text, lang = 'zh') {
   const tried = new Set();
   for (const variant of [text.trim(), text.trim().replace(/台/g, '臺')]) {
     for (const [fn, level] of STEPS) {
       const q = fn(variant).trim();
       if (!q || tried.has(q)) continue;
       tried.add(q);
-      const hit = await nominatim(q);
+      const hit = await nominatim(q, lang);
       const lv = typeof level === 'function' ? level(q) : level;
       if (hit) return { lon: +hit.lon, lat: +hit.lat, label: hit.display_name, level: lv, query: q, exact: lv === '完整地址' };
     }

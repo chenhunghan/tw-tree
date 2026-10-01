@@ -128,7 +128,7 @@ A GitHub Pages site. It shows tree cover as procedural three.js trees on custom 
   - Optional baked-in OSM coastline, roads and labels require ODbL attribution.
 - **Location search:**
   - `lat,lon` parsing and browser geolocation run locally.
-  - Addresses go to Nominatim (CORS verified) with `countrycodes=tw` and `accept-language=zh-TW`, at most 1 request per second, with no autocomplete, and with OSM attribution shown.
+  - Addresses go to Nominatim (CORS verified) with `countrycodes=tw` and `accept-language=zh-TW` (`en,zh-TW` in the English UI), at most 1 request per second, with no autocomplete, and with OSM attribution shown.
 
 ## Implementation (pilot, 2026-09-27)
 
@@ -221,6 +221,24 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   timeline paused on `y`, no autorotate) instead of a random start; only `at` is required. The 分享 button builds the link
   from the selected pixel (else the view centre), the camera distance/heading/tilt and the shown year, writes it to the
   address bar and copies it (shows it in the status line if the clipboard is refused).
+- **Site stories (2026-10-01):** `?story=tsmc-<site>` (or `?story=tsmc` for the first) flies to a TSMC site, draws its
+  OSM outline on the ground (Line2, depth test off, re-draped as detailed tiles arrive), opens in daylight, holds 3 s on
+  the start year (6 years before the decline), then plays at 0.45 years/s through the decline and 2.6 years/s outside it,
+  and shows the site vs a 400 m ring series, live per-year values and the before/after summary (`js/story.js`). Data:
+  `site/stories/tsmc.json`, from `pipeline/analysis/site_series.py` (owned land pixels whose centre is inside the
+  outline, gap-filled like the app, from the published `taiwan/` tiles) and `build_stories.py` (largest 4-vs-3-year step
+  down, widened to the whole decline; context text with dates checked against the cited sources; site definitions in
+  `pipeline/analysis/tsmc_sites.json`). Outlines are OSM-derived (ODbL; credited in the footer while a story is open).
+  Clear stories: Fab 20 Baoshan 55 → 19 % (2023–24), Fab 25 Taichung 47 → 11 % (2025–26), Global R&D Center 55 → 11 %
+  (2020–21), Fab 18 Tainan 28 → 7 % (2017–20), Fab 12 Hsinchu 50 → 13 % (2008), Fab 15 Taichung 37 → 15 % (2015–16), AP6
+  Zhunan 41 → 21 % (2020–22), Fab 14 Tainan 37 → 20 % (1998, the ring fell too); AP7 Chiayi was farmland (crops read as
+  partial cover) and Fab 22 a refinery (16 → 8 %). On phones, story mode hides the header's weather/stats rows, the legend
+  and camera buttons, pulls the camera back 1.6× and shifts the image up (`setViewOffset`) above the card.
+- **Languages (2026-10-01):** Traditional Chinese and English (`js/i18n.js`). Order: `?lang=zh|en`, then the choice
+  saved by the 中文/EN button (localStorage `tpetree.lang`; switching reloads), then `navigator.languages` (zh-* → zh,
+  en-* → en), else English. `index.html` is written in Chinese; elements with `data-i18n`, `-title`, `-ph`, `-aria`,
+  `-content` keys are replaced in English, and the about dialog has a full `data-lang="en"` copy. Share and story links
+  never carry `lang`. Nominatim gets `accept-language=en,zh-TW` in English.
 - **Camera (2026-09-29):** MapControls: left-drag pans; right-drag, Shift/Ctrl/⌘+drag or a two-finger twist rotates. A
   control column (row on phones) adds rotate ±26°, tilt ±10°, and a compass that shows north and resets to north-up;
   keys Q/E rotate, R/F tilt, N north. Pending turns are eased and capped, so a held key keeps a steady pace.

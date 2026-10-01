@@ -13,6 +13,8 @@ import { EXAG, DISPLAY_ZONE, prepareFilled, buildTerrain, setTerrainYears, makeT
 import { Weather, PRESETS } from './weather.js';
 import { Forest, NEAR_DIST } from './trees.js';
 import { City } from './buildings.js';
+import { t, lang, applyDom, levelName } from './i18n.js';
+import { Story } from './story.js';
 
 const params = new URLSearchParams(location.search);
 const HF = 'https://huggingface.co/datasets/chenhunghan/tw-tree/resolve/main/';
@@ -22,6 +24,7 @@ const MIN_ISLAND_TILES = 150;
 const YEARS_PER_SEC = 0.8;
 const LOW_SCENES = 5;
 const $ = (id) => document.getElementById(id);
+applyDom();
 
 // ---------- scene ----------
 // Logarithmic depth: the view spans 5 m to 900 km, and water 4 m above the sea plane must not z-fight (flicker).
@@ -85,9 +88,14 @@ function setMiniature(on) {
   miniature = on; tiltH.enabled = tiltV.enabled = on;
   document.getElementById('tilt')?.classList.toggle('on', on);
 }
+// On a phone the story card covers the lower half: shift the image up so the site sits above it.
+function applyViewOffset() {
+  const shift = document.body.classList.contains('story-mode') && innerWidth <= 640 ? Math.round(innerHeight * 0.2) : 0;
+  if (shift) camera.setViewOffset(innerWidth, innerHeight, 0, shift, innerWidth, innerHeight); else camera.clearViewOffset();
+}
 function resize() {
   const w = innerWidth, h = innerHeight;
-  camera.aspect = w / h; camera.updateProjectionMatrix();
+  camera.aspect = w / h; camera.updateProjectionMatrix(); applyViewOffset();
   renderer.setSize(w, h); composer.setSize(w, h); bloom.setSize(w, h);
   tiltH.uniforms.h.value = 3.2 / w; tiltV.uniforms.v.value = 3.2 / h;
 }
@@ -121,12 +129,12 @@ async function load() {
   const [ox, oy] = lonLatToUtm((w + e) / 2, (s + n) / 2, DISPLAY_ZONE);
   frame = { ox: Math.round(ox), oy: Math.round(oy) };
   const r2 = index.model?.metrics_vs_worldcover_holdout?.r2;
-  if (r2) $('metricR2').textContent = `R² ≈ ${r2.toFixed(2)}`;
-  if (index.name !== 'pilot') $('regionName').textContent = index.complete === false ? `全臺（製作中：${index.tiles.length}/${index.tiles_planned} 圖塊）`
-    : index.normalisation ? '全臺' : '全臺（未正規化）';
+  if (r2) for (const id of ['metricR2', 'metricR2en']) $(id).textContent = `R² ≈ ${r2.toFixed(2)}`;
+  if (index.name !== 'pilot') $('regionName').textContent = index.complete === false ? t('regionBuilding', index.tiles.length, index.tiles_planned)
+    : index.normalisation ? t('regionAll') : t('regionRaw');
   streaming = index.tiles.length > EAGER_MAX || params.has('stream');
   if (streaming) {
-    $('loadMsg').textContent = '全島概觀…';
+    $('loadMsg').textContent = t('loadOverview');
     if (await ds.loadOverview()) {
       for (const t of ds.overview.values()) prepareFilled(t, years);
       const look = (z, i, j) => ds.overview.get(`${z}_${i}_${j}`);
@@ -145,7 +153,7 @@ async function load() {
         prepareFilled(tile, years);
         done++;
         $('loadBar').style.width = `${(100 * done / index.tiles.length).toFixed(0)}%`;
-        $('loadMsg').textContent = `${done} / ${index.tiles.length} 個圖塊`;
+        $('loadMsg').textContent = t('loadTiles', done, index.tiles.length);
       }
     };
     await Promise.all(Array.from({ length: 6 }, worker));
@@ -154,20 +162,24 @@ async function load() {
   computeStats(index);
   buildTimeline(index);
   buildMinimap();
-  // a shared link (?at=lat,lon) opens there; otherwise start close enough to see trees, at a random place where
-  // tree cover changed; then autoplay
-  const shared = sharedView();
-  const start = shared ? null : pickStart();
+  // a story link (?story=id) or a shared view (?at=lat,lon) opens there; otherwise start close enough to see trees, at
+  // a random place where tree cover changed; then autoplay
+  const storyId = Story.requested(params);
+  if (storyId) await story.load(storyId).catch((err) => console.error(err));
+  const storyOk = !!(storyId && story.open(storyId));     // places the camera and starts the story's playback
+  const shared = storyOk ? null : sharedView();
+  const start = storyOk || shared ? null : pickStart();
   if (shared) openShared(shared);
   else if (start) viewAt(start);
-  else {
+  else if (!storyOk) {
     const span = Math.max(...index.tiles.map(t => Math.hypot(...toWorld(frame, t.zone, t.x0, t.y0, 0).filter((_, k) => k !== 1))));
     const d = streaming ? span * 1.9 : 20000;
     controls.target.set(0, 0, 0); camera.position.set(-d * 0.17, d * 0.62, d * 0.76);
   }
-  controls.autoRotate = !shared; controls.autoRotateSpeed = 0.35;
+  controls.autoRotate = !shared && !storyOk; controls.autoRotateSpeed = 0.35;
   $('loading').style.opacity = 0;
   setTimeout(() => $('loading').remove(), 700);
+  if (storyOk) return;
   const y = shared ? years.indexOf(shared.year) : -1;
   setYearPos(y >= 0 ? y : 0);
   playing = y < 0; updatePlayButton();
@@ -338,7 +350,7 @@ function buildTrend(index) {
     return `<polyline fill="none" stroke="${color}" stroke-width="1.8" vector-effect="non-scaling-stroke" points="${v.map((x, i) => `${xp(i).toFixed(1)},${yp(x).toFixed(1)}`).join(' ')}"/>`;
   };
   $('trend').innerHTML = line(B, '#8c8c86') + line(T, '#2b6a3a') + `<line id="trendNow" y1="0" y2="${H}" stroke="#d9480f" stroke-width="1" vector-effect="non-scaling-stroke"/>`;
-  const k = (v) => `${Math.round(Math.min(...v) / 1000)}k–${Math.round(Math.max(...v) / 1000)}k 公頃`;
+  const k = (v) => t('haRange', Math.round(Math.min(...v) / 1000), Math.round(Math.max(...v) / 1000));
   $('trendTree').textContent = k(T); $('trendBuilt').textContent = k(B);
   $('trendBox').hidden = false; $('statBuiltBox').hidden = false;
   trend = { xp, B };
@@ -347,16 +359,16 @@ let trend = null;
 
 function updateStats(year) {
   const a = areaByYear[year], a0 = areaByYear[years[0]];
-  $('statArea').textContent = `${Math.round(a).toLocaleString()} 公頃`;
+  $('statArea').textContent = t('ha', Math.round(a).toLocaleString());
   const d = a - a0, el = $('statDelta');
-  el.textContent = `${d >= 0 ? '+' : '−'}${Math.abs(Math.round(d)).toLocaleString()} 公頃`;
+  el.textContent = `${d >= 0 ? '+' : '−'}${t('ha', Math.abs(Math.round(d)).toLocaleString())}`;
   el.className = d < 0 ? 'down' : 'up';
   const nScenes = ds.index.scenes_per_year_region[year];
-  $('statScenes').textContent = `${nScenes} 景${nScenes < LOW_SCENES ? '（低信心）' : ''}`;
+  $('statScenes').textContent = t('scenes', nScenes, nScenes < LOW_SCENES);
   if (trend) {
     const i = years.indexOf(year), x = trend.xp(i);
     $('trendNow').setAttribute('x1', x); $('trendNow').setAttribute('x2', x);
-    $('statBuilt').textContent = `${Math.round(trend.B[i]).toLocaleString()} 公頃`;
+    $('statBuilt').textContent = t('ha', Math.round(trend.B[i]).toLocaleString());
   }
 }
 
@@ -369,12 +381,12 @@ function buildTimeline(index) {
     const n = index.scenes_per_year_region[y];
     const b = document.createElement('span');
     b.style.height = `${Math.max(10, 100 * n / max)}%`;
-    b.title = `${y}：${n} 景`;
+    b.title = t('barTitle', y, n);
     if (n < LOW_SCENES) b.className = 'low';
     const gapBefore = i > 0 && y - years[i - 1] > 1;
     if (gapBefore) {                      // missing years: dashed divider on the bar row
       const miss = `${years[i - 1] + 1}${y - years[i - 1] > 2 ? '–' + (y - 1) : ''}`;
-      b.style.borderLeft = '2px dashed #a8622d'; b.title += `（${miss} 無資料）`;
+      b.style.borderLeft = '2px dashed #a8622d'; b.title += t('barMissing', miss);
     }
     bars.appendChild(b);
     const last = i === years.length - 1;
@@ -405,11 +417,12 @@ function setYearPos(p) {
   $('slider').value = yearPos / (years.length - 1);
   updateStats(shown);
   if (selected) renderInfo();
+  story.update(shown);
 }
 
 function updatePlayButton() { $('play').textContent = playing ? '❚❚' : '▶'; }
 $('play').onclick = () => {
-  if (!playing && yearPos >= years.length - 1) setYearPos(0);
+  if (!playing && yearPos >= years.length - 1) setYearPos(story.active ? story.from : 0);
   playing = !playing; updatePlayButton();
 };
 $('slider').addEventListener('input', (e) => { playing = false; updatePlayButton(); setYearPos(+e.target.value * (years.length - 1)); });
@@ -576,23 +589,23 @@ function renderInfo() {
   const x = tile.x[k], y = tile.y[k], [lon, lat] = utmToLonLat(x, y, tile.zone);
   const f = tile.f[year][k];
   const prov = ds.prov.get(tile.key);
-  let src = '<span class="note">讀取來源中…</span>';
+  let src = `<span class="note">${t('iSrcLoading')}</span>`;
   if (prov) {
     const s = prov.s[year][k], n = prov.n[year][k];
-    src = s === NODATA_S ? '當年無清晰觀測' : `<code>${prov.meta.scenes[year][s]}</code><br><span class="note">當年清晰觀測 ${n} 日；原始像元：col = (${x} − 15 − ulx) / 30，row = (uly − ${y} − 15) / 30</span>`;
+    src = s === NODATA_S ? t('iSrcNone') : `<code>${prov.meta.scenes[year][s]}</code><br><span class="note">${t('iSrcNote', n, x, y)}</span>`;
   }
   $('infoBody').innerHTML = `
     <dl>
-      <dt>年份</dt><dd>${year}</dd>
-      <dt>樹冠比例</dt><dd><b>${f === NODATA_F ? '無觀測' : f + '%'}</b></dd>
-      <dt>經緯度</dt><dd>${lat.toFixed(6)}, ${lon.toFixed(6)}</dd>
-      <dt>像元中心</dt><dd>x ${x}, y ${y}<br><span class="note">EPSG:${32600 + tile.zone}（Landsat 原始格網）</span></dd>
-      <dt>高度</dt><dd>${tile.z[k]} 公尺</dd>
-      ${tile.built ? `<dt>建成</dt><dd>${tile.built[k] ? (tile.built[k] === 72 ? '1972 年以前' : tile.built[k] === 78 ? '1978–1984 年' : `${1900 + tile.built[k]} 年`) + `（GISA）<br><span class="note">建成面積約 ${tile.bs[k]}%、建物高度約 ${tile.bh[k]} 公尺（GHSL 2018）</span>` : '2021 年前未建成（GISA）'}</dd>` : ''}
-      <dt>來源影像</dt><dd>${src}</dd>
+      <dt>${t('iYear')}</dt><dd>${year}</dd>
+      <dt>${t('iFrac')}</dt><dd><b>${f === NODATA_F ? t('iNoObs') : f + '%'}</b></dd>
+      <dt>${t('iLonLat')}</dt><dd>${lat.toFixed(6)}, ${lon.toFixed(6)}</dd>
+      <dt>${t('iPixel')}</dt><dd>x ${x}, y ${y}<br><span class="note">EPSG:${32600 + tile.zone} (${t('iGrid')})</span></dd>
+      <dt>${t('iElev')}</dt><dd>${t('iM', tile.z[k])}</dd>
+      ${tile.built ? `<dt>${t('iBuilt')}</dt><dd>${tile.built[k] ? (tile.built[k] === 72 ? t('iBuilt72') : tile.built[k] === 78 ? t('iBuilt78') : t('iBuiltYear', 1900 + tile.built[k])) + ` (GISA)<br><span class="note">${t('iBuiltNote', tile.bs[k], tile.bh[k])}</span>` : t('iNotBuilt')}</dd>` : ''}
+      <dt>${t('iSource')}</dt><dd>${src}</dd>
     </dl>
     ${sparkline(tile, k, year)}
-    <div class="note">折線：各年樹冠比例；空缺為當年無清晰觀測。</div>`;
+    <div class="note">${t('iSpark')}</div>`;
 }
 
 function sparkline(tile, k, cur) {
@@ -605,7 +618,7 @@ function sparkline(tile, k, cur) {
     d += `${pen ? 'L' : 'M'}${xp(i).toFixed(1)},${yp(v).toFixed(1)}`; pen = true;
     if (y === cur) dots = `<circle cx="${xp(i)}" cy="${yp(v)}" r="3.5" fill="#d9480f"/>`;
   });
-  return `<svg id="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="樹冠比例時間序列">
+  return `<svg id="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="${t('iSparkAria')}">
     <line x1="${pad}" x2="${W - pad}" y1="${yp(50)}" y2="${yp(50)}" stroke="#ccc" stroke-dasharray="3 3"/>
     <path d="${d}" fill="none" stroke="#2b6a3a" stroke-width="1.6"/>${dots}</svg>`;
 }
@@ -636,7 +649,7 @@ function flyTo(lon, lat, label) {
 }
 
 function status(msg, warn = false) { const el = $('searchStatus'); el.textContent = msg; el.className = warn ? 'warn' : ''; }
-const outside = () => ds.index?.name === 'pilot' ? '此位置超出目前資料範圍（臺北試行版），全臺資料製作中。' : '此位置不在資料範圍內（臺灣本島、澎湖、金門、馬祖）或該圖塊尚未完成。';
+const outside = () => ds.index?.name === 'pilot' ? t('outsidePilot') : t('outside');
 
 $('searchForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -645,27 +658,27 @@ $('searchForm').addEventListener('submit', async (e) => {
   const c = parseCoords(q);
   if (c) {
     const inside = flyTo(c[0], c[1]);
-    status(inside ? `座標 ${c[1].toFixed(5)}, ${c[0].toFixed(5)}` : outside(), !inside);
+    status(inside ? t('coords', c[1].toFixed(5), c[0].toFixed(5)) : outside(), !inside);
     return;
   }
-  status('搜尋中…（OpenStreetMap Nominatim）');
+  status(t('searching'));
   try {
-    const r = await geocode(q);
-    if (!r) { status('找不到這個地點，試試地標、路名或行政區。', true); return; }
+    const r = await geocode(q, lang);
+    if (!r) { status(t('notFound'), true); return; }
     const inside = flyTo(r.lon, r.lat);
-    const precision = r.exact ? '' : `（找不到完整地址，已定位到「${r.query}」的${r.level}層級）`;
-    status(inside ? `${r.label.split(',').slice(0, 3).join('，')}${precision}` : outside(), !inside || !r.exact);
+    const precision = r.exact ? '' : t('precision', r.query, levelName(r.level));
+    status(inside ? `${r.label.split(',').slice(0, 3).map(x => x.trim()).join(t('listSep'))}${precision}` : outside(), !inside || !r.exact);
   } catch (err) {
-    status(`地址搜尋失敗：${err.message}`, true);
+    status(t('searchFail', err.message), true);
   }
 });
 
 $('gps').onclick = () => {
-  if (!navigator.geolocation) { status('這個瀏覽器不支援定位。', true); return; }
-  status('取得裝置位置中…');
+  if (!navigator.geolocation) { status(t('noGeo'), true); return; }
+  status(t('locating'));
   navigator.geolocation.getCurrentPosition(
-    (p) => { const inside = flyTo(p.coords.longitude, p.coords.latitude); status(inside ? `你的位置（精度約 ${Math.round(p.coords.accuracy)} 公尺）` : outside(), !inside); },
-    (err) => status(`無法取得位置：${err.message}`, true), { enableHighAccuracy: true, timeout: 10000 });
+    (p) => { const inside = flyTo(p.coords.longitude, p.coords.latitude); status(inside ? t('yourPos', Math.round(p.coords.accuracy)) : outside(), !inside); },
+    (err) => status(t('geoFail', err.message), true), { enableHighAccuracy: true, timeout: 10000 });
 };
 
 // ---------- share: ?at=lat,lon&d=<m>&az=<deg>&el=<deg>&y=<year> ----------
@@ -676,20 +689,45 @@ function sharedView() {
   const num = (k, lo, hi, def) => { const v = parseFloat(params.get(k)); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def; };
   return { lon: c[0], lat: c[1], d: num('d', 30, 400000, 1700), az: num('az', -360, 360, 200), el: num('el', 2, 89, 33), year: parseInt(params.get('y'), 10) };
 }
-function viewLonLat(lon, lat, dist, elevDeg, azDeg) {
+function groundLonLat(lon, lat) {
   const [X, Y] = lonLatToUtm(lon, lat, DISPLAY_ZONE);
-  const [wx, wy, wz] = toWorld(frame, DISPLAY_ZONE, X, Y, groundDisplay(X, Y));
-  const e = THREE.MathUtils.degToRad(elevDeg), a = THREE.MathUtils.degToRad(azDeg);
-  controls.target.set(wx, wy, wz); controls.autoRotate = false;
-  camera.position.set(wx + Math.sin(a) * Math.cos(e) * dist, wy + Math.sin(e) * dist, wz + Math.cos(a) * Math.cos(e) * dist);
-  lastMove = 0; lastFocus = null; controls.update();
-  return [wx, wy, wz];
+  return toWorld(frame, DISPLAY_ZONE, X, Y, groundDisplay(X, Y));
 }
+function poseLonLat(lon, lat, dist, elevDeg, azDeg) {
+  const target = new THREE.Vector3(...groundLonLat(lon, lat));
+  const e = THREE.MathUtils.degToRad(elevDeg), a = THREE.MathUtils.degToRad(azDeg);
+  return { target, cam: target.clone().add(new THREE.Vector3(Math.sin(a) * Math.cos(e), Math.sin(e), Math.cos(a) * Math.cos(e)).multiplyScalar(dist)) };
+}
+function viewLonLat(lon, lat, dist, elevDeg, azDeg) {
+  const { target, cam } = poseLonLat(lon, lat, dist, elevDeg, azDeg);
+  controls.target.copy(target); camera.position.copy(cam); controls.autoRotate = false;
+  lastMove = 0; lastFocus = null; controls.update();
+  return target.toArray();
+}
+
+const story = new Story({
+  scene, years: () => years, ground: groundLonLat, status, tilesVersion: () => ds.tiles.size, layout: applyViewOffset,
+  setYear: (i, play) => { setYearPos(i); playing = play; updatePlayButton(); },
+  view: (lon, lat, d, el, az, animate) => {
+    pin.visible = false; marker.visible = false; $('info').hidden = true; selected = null;
+    if (camera.aspect < 0.8) d *= 1.6;                     // portrait phone: narrow horizontal view
+    applyViewOffset();
+    if (!animate) {                                        // opening link: daylight, so the change is visible
+      if (!params.has('weather')) weather.setPreset('clear');
+      if (!params.has('hour')) weather.setHour(10.5);
+      weather.auto = false; weather.cur = { ...PRESETS[weather.preset] }; syncWeatherUi();
+      viewLonLat(lon, lat, d, el, az); return;
+    }
+    const { target, cam } = poseLonLat(lon, lat, d, el, az);
+    fly = { t0: performance.now(), dur: 2200, fromT: controls.target.clone(), fromC: camera.position.clone(), toT: target, toC: cam };
+    controls.autoRotate = false;
+  },
+});
 function openShared(v) {
   const [wx, wy, wz] = viewLonLat(v.lon, v.lat, v.d, v.el, v.az);
   pin.position.set(wx, wy, wz); pin.visible = true;
   const [X, Y] = lonLatToUtm(v.lon, v.lat, DISPLAY_ZONE);
-  if (entryDisplay(X, Y)) { selectWorld(wx, wz); status(`分享的位置 ${v.lat.toFixed(5)}, ${v.lon.toFixed(5)}`); }
+  if (entryDisplay(X, Y)) { selectWorld(wx, wz); status(t('shared', v.lat.toFixed(5), v.lon.toFixed(5))); }
   else status(outside(), true);
 }
 function shareUrl() {
@@ -697,7 +735,7 @@ function shareUrl() {
   if (selected) [wx, , wz] = toWorld(frame, selected.tile.zone, selected.tile.x[selected.k], selected.tile.y[selected.k], 0);
   const [lon, lat] = utmToLonLat(...worldToDisplayUtm(frame, wx, wz), DISPLAY_ZONE);
   const u = new URL(location.href);
-  for (const k of ['at', 'd', 'az', 'el', 'y']) u.searchParams.delete(k);
+  for (const k of ['at', 'd', 'az', 'el', 'y', 'story', 'lang']) u.searchParams.delete(k);   // the viewer's browser picks the language
   u.searchParams.set('at', `${lat.toFixed(5)},${lon.toFixed(5)}`);
   u.searchParams.set('d', String(Math.round(camera.position.distanceTo(controls.target))));
   u.searchParams.set('az', String(Math.round(THREE.MathUtils.radToDeg(controls.getAzimuthalAngle()))));
@@ -708,8 +746,8 @@ function shareUrl() {
 $('share').onclick = async () => {
   const url = shareUrl();
   history.replaceState(null, '', url);
-  try { await navigator.clipboard.writeText(url); status('已複製這個視角的連結。'); }
-  catch { status(`連結：${url}`); }
+  try { await navigator.clipboard.writeText(url); status(t('copied')); }
+  catch { status(t('linkIs', url)); }
 };
 
 $('aboutBtn').onclick = () => $('about').showModal();
@@ -720,7 +758,7 @@ $('randomBtn').onclick = () => {
   fly = { t0: performance.now(), dur: 2200, fromT: controls.target.clone(), fromC: camera.position.clone(), toT: target, toC: cam };
   controls.autoRotate = true;
   const [lon, lat] = utmToLonLat(p.x, p.y, p.zone);
-  status(`隨機地點 ${lat.toFixed(4)}, ${lon.toFixed(4)}`);
+  status(t('random', lat.toFixed(4), lon.toFixed(4)));
 };
 
 // ---------- weather controls (decorative) ----------
@@ -774,7 +812,7 @@ function tick(now) {
 }
 function step(dt, now = performance.now()) {
   if (playing && years.length) {
-    setYearPos(yearPos + dt * YEARS_PER_SEC);
+    setYearPos(yearPos + dt * (story.active ? story.speed(yearPos) : YEARS_PER_SEC));
     if (yearPos >= years.length - 1) { playing = false; updatePlayButton(); }
   }
   if (fly) {
@@ -815,4 +853,4 @@ window.__app = {
 };
 
 requestAnimationFrame(tick);
-load().catch((err) => { $('loadMsg').textContent = `載入失敗：${err.message}`; console.error(err); });
+load().catch((err) => { $('loadMsg').textContent = t('loadFail', err.message); console.error(err); });
