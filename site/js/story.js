@@ -63,7 +63,8 @@ export class Story {
       ...[...new Set((s.buildings ?? []).map(b => b.year))].map(y => [this.idx(y) - 1, this.idx(y) + 0.3])];
     document.body.classList.add('story-mode');
     this.app.view(opts.lon ?? s.lon, opts.lat ?? s.lat, opts.d ?? s.d, opts.el ?? s.el, opts.az ?? s.az, animate);
-    const xs = s.polygon.map(p => p[0]), ys = s.polygon.map(p => p[1]), pad = 0.012;   // ~1.3 km around the site
+    // wait for the detail around what the view shows: the site plus ~a third of the camera distance (at least 1.3 km)
+    const xs = s.polygon.map(p => p[0]), ys = s.polygon.map(p => p[1]), pad = Math.max(1300, 0.35 * (opts.d ?? s.d)) / 111000;
     this.area = [Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) + pad, Math.max(...ys) + pad];
     this.ring = s.polygon.map(([lo, la]) => { const [x, , z] = this.app.ground(lo, la); return [x, z]; });
     this.outline(true);

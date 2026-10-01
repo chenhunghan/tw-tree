@@ -773,7 +773,7 @@ const story = new Story({
   setYear: (i, play) => { setYearPos(i); playing = play; updatePlayButton(); },
   view: (lon, lat, d, el, az, animate) => {
     pin.visible = false; marker.visible = false; $('info').hidden = true; selected = null;
-    if (camera.aspect < 0.8) d *= 1.6;                     // portrait phone: narrow horizontal view
+    if (camera.aspect < 0.8) d = Math.min(d * 1.6, 16000); // portrait phone: narrow horizontal view
     applyViewOffset();
     if (!animate) {                                        // opening link: daylight, so the change is visible
       if (!params.has('weather')) weather.setPreset('clear');

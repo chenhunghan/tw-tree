@@ -71,10 +71,9 @@ for sid in ORDER:
     j = k0                                   # ... and ends once less than 5 more points are lost in the next 3 years
     while j < len(Y) - 1 and s[j] - s[j + 1:j + 4].min() >= 5: j += 1
     b, a = slice(max(0, k0 - 5), k0), slice(j, min(len(Y), j + 3))
-    lon0, lat0, lon1, lat1 = v['bounds']
-    diag = np.hypot((lon1 - lon0) * 101000, (lat1 - lat0) * 111000)
     st = {'id': f'tsmc-{sid}', **{x: S[sid][x] for x in ('zh', 'en', 'place_zh', 'place_en', 'ctx_zh', 'ctx_en', 'src')},
-          'lat': v['centroid'][0], 'lon': v['centroid'][1], 'd': int(np.clip(diag * 2.4, 1500, 3600)), 'az': 15, 'el': 40,
+          # framing: the fab and its neighbourhood (the reference view was Fab 14, 84 ha, at 11.8 km, heading 160, tilt 48)
+          'lat': v['centroid'][0], 'lon': v['centroid'][1], 'd': int(np.clip(11837 * np.sqrt(v['site']['ha'] / 84), 7000, 12500)), 'az': 160, 'el': 48,
           'ha': v['site']['ha'], 'change': [Y[k0], Y[j]], 'before': [Y[b.start], Y[b.stop - 1]], 'after': [Y[a.start], Y[a.stop - 1]],
           'site_before': round(float(s[b].mean()), 1), 'site_after': round(float(s[a].mean()), 1), 'site_now': s[-1],
           'ring_before': round(float(r[b].mean()), 1), 'ring_after': round(float(r[a].mean()), 1), 'ring_now': r[-1],

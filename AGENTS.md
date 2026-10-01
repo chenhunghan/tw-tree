@@ -245,8 +245,11 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   Zhunan 41 → 21 % (2020–22), Fab 14 Tainan 37 → 20 % (1998, the ring fell too); AP7 Chiayi was farmland (crops read as
   partial cover) and Fab 22 a refinery (16 → 8 %). On phones, story mode hides the header's weather/stats rows, the legend
   and camera buttons, pulls the camera back 1.6× and shifts the image up (`setViewOffset`) above the card.
+- **Story framing (2026-10-01):** every story opens on the fab and its neighbourhood, after the user's chosen Fab 14 view
+  (`?story=tsmc-fab14&d=11837&az=160&el=48`): heading 160°, tilt 48°, distance 11.8 km × √(site ha / 84) within
+  7–12.5 km (`build_stories.py`); phones ×1.6 up to 16 km. The load wait covers the site plus 0.35 × that distance.
 - **Story playback and links (2026-10-01):** on open, playback holds on the start year behind a "Loading site detail
-  n/m tiles" pill until every detail tile within ~1.3 km of the outline is loaded and the trees have been rebuilt after
+  n/m tiles" pill until every detail tile within max(1.3 km, 0.35 × camera distance) of the outline is loaded and the trees have been rebuilt after
   the last one arrived (or 25 s), then 1.5 s on the first year. It starts 3 years before the clearing and plays at
   0.5 years/s through the clearing and for a year around each building's appear year, 1.2 years/s otherwise. Story links
   take optional `at`, `d`, `az`, `el` and `from` (start year); "Share this story" writes the current view (and `from`
