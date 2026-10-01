@@ -73,7 +73,7 @@ for sid in ORDER:
     b, a = slice(max(0, k0 - 5), k0), slice(j, min(len(Y), j + 3))
     st = {'id': f'tsmc-{sid}', **{x: S[sid][x] for x in ('zh', 'en', 'place_zh', 'place_en', 'ctx_zh', 'ctx_en', 'src')},
           # framing: the fab and its neighbourhood (the reference view was Fab 14, 84 ha, at 11.8 km, heading 160, tilt 48)
-          'lat': v['centroid'][0], 'lon': v['centroid'][1], 'd': int(np.clip(11837 * np.sqrt(v['site']['ha'] / 84), 7000, 12500)), 'az': 160, 'el': 48,
+          'lat': v['centroid'][0], 'lon': v['centroid'][1], 'd': int(np.clip(6500 * np.sqrt(v['site']['ha'] / 84), 4000, 7500)), 'az': 160, 'el': 48,
           'ha': v['site']['ha'], 'change': [Y[k0], Y[j]], 'before': [Y[b.start], Y[b.stop - 1]], 'after': [Y[a.start], Y[a.stop - 1]],
           'site_before': round(float(s[b].mean()), 1), 'site_after': round(float(s[a].mean()), 1), 'site_now': s[-1],
           'ring_before': round(float(r[b].mean()), 1), 'ring_after': round(float(r[a].mean()), 1), 'ring_now': r[-1],

@@ -247,6 +247,7 @@ export class Story {
     this.#unicorns(camera, yearF, dt);
     if (!this.blds.length) return;
     const v = new THREE.Vector3(), w = innerWidth, h = innerHeight, placed = [];
+    const circles = this.unicorns.flying ? this.unicorns.screenCircles(camera, w, h) : [];
     for (const o of this.blds) {                   // largest first: a label overlapping one already placed is hidden
       const g = THREE.MathUtils.smoothstep(yearF, o.b.year - 0.8, o.b.year + 0.2);
       o.mesh.visible = g > 0.001; o.mesh.scale.y = Math.max(g, 0.001);
@@ -257,6 +258,8 @@ export class Story {
       if (show && placed.some(r => Math.abs(r[0] - x) < r[2] + lw && Math.abs(r[1] - y) < lh)) show = false;
       if (show) placed.push([x, y, lw]);
       o.label.hidden = !show;
+      // unicorns fly above everything: a label one passes over fades out
+      if (show) o.label.classList.toggle('under', circles.some(([cx, cy, r]) => Math.abs(cx - x) < lw + r && y - lh - r < cy && cy < y + r));
       if (show) o.label.style.transform = `translate(${x.toFixed(0)}px, ${y.toFixed(0)}px) translate(-50%, -100%)`;
     }
   }

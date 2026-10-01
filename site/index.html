@@ -121,6 +121,7 @@
   .blabel { position: absolute; left: 0; top: 0; padding: 2px 7px; border-radius: 7px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
     background: rgba(250, 250, 245, 0.9); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 2px 8px rgba(20, 40, 30, 0.15); }
   .blabel.building { color: var(--loss); }
+  .blabel { transition: opacity 0.25s; } .blabel.under { opacity: 0.08; }
   .story-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .story-actions select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: #fff; min-width: 0; flex: 1; }
   #info h2 { font-size: 14px; margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; }

@@ -76,13 +76,15 @@ function wingGeometry() {
 
 export class Unicorns {
   constructor(scene) {
-    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: 0x2a2433 });
+    // top layer: in the transparent pass (still opaque, depth-written) with a render order after the site outline (11),
+    // which is drawn without depth test; story.js fades the HTML labels a unicorn passes over
+    const mat = new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: 0x2a2433, transparent: true });
     this.body = new THREE.InstancedMesh(bodyGeometry(), mat, MAX);
     this.legs = new THREE.InstancedMesh(legGeometry(), mat, MAX * 4);
     // feathers are thin cards that often face away from the sun: lit mostly by their own glow
-    this.wings = new THREE.InstancedMesh(wingGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: 0x8a8296 }), MAX * 2);
+    this.wings = new THREE.InstancedMesh(wingGeometry(), new THREE.MeshLambertMaterial({ vertexColors: true, side: THREE.DoubleSide, emissive: 0x8a8296, transparent: true }), MAX * 2);
     for (const m of [this.body, this.legs, this.wings]) {
-      m.count = 0; m.frustumCulled = false; m.castShadow = false; m.renderOrder = 4;
+      m.count = 0; m.frustumCulled = false; m.castShadow = false; m.renderOrder = 13;
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       scene.add(m);
     }
@@ -98,7 +100,7 @@ export class Unicorns {
     tg.setAttribute('color', new THREE.BufferAttribute(col, 4).setUsage(THREE.DynamicDrawUsage));
     tg.setIndex(idx);
     this.trail = new THREE.Mesh(tg, new THREE.MeshBasicMaterial({ vertexColors: true, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
-    this.trail.frustumCulled = false; this.trail.renderOrder = 3; this.nv = nv;
+    this.trail.frustumCulled = false; this.trail.renderOrder = 12; this.nv = nv;
     scene.add(this.trail);
     this.list = [];
     this.m = new THREE.Matrix4(); this.p = new THREE.Matrix4(); this.q = new THREE.Quaternion();
@@ -106,6 +108,21 @@ export class Unicorns {
   }
 
   get flying() { return this.list.length; }
+
+  // Screen circles [x, y, r] (CSS px) around each unicorn in view, for hiding labels underneath.
+  screenCircles(camera, w, h) {
+    const out = [], v = new THREE.Vector3(), e = new THREE.Vector3();
+    for (const u of this.list) {
+      this.#at(u, u.t, v); v.y += 1.5 * u.size;
+      const d = v.distanceTo(camera.position);
+      v.project(camera);
+      if (v.z > 1 || Math.abs(v.x) > 1.2 || Math.abs(v.y) > 1.2) continue;
+      // ~2 unicorn units across (wings spread), in pixels at that distance
+      const r = 2.2 * u.size / (d * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)) * h / 2;
+      out.push([(v.x + 1) / 2 * w, (1 - v.y) / 2 * h, r]);
+    }
+    return out;
+  }
   clear() { this.list.length = 0; this.#draw(); }
 
   // origin: THREE.Vector3 (a roof); size: world units per unicorn unit (scaled to stay readable from the camera)
