@@ -110,10 +110,10 @@ export class Story {
   }
 
   async share() {
-    const u = new URL(location.origin + location.pathname);
+    // s/<id>/ is a static page with this story's preview image and title for social sites; it forwards here at once
+    const u = new URL(`s/${this.cur.id}/`, location.origin + location.pathname.replace(/[^/]*$/, ''));
     const data = new URLSearchParams(location.search).get('data');
     if (data) u.searchParams.set('data', data);
-    u.searchParams.set('story', this.cur.id);
     // the current view (centre if moved, distance, heading, tilt) and, before the end of the clearing, the start year
     const v = this.app.viewState(), s = this.cur;
     if (Math.hypot((v.lon - s.lon) * 101000, (v.lat - s.lat) * 111000) > 60) u.searchParams.set('at', `${v.lat.toFixed(5)},${v.lon.toFixed(5)}`);

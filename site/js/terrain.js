@@ -182,6 +182,10 @@ export function makeWaterMaterial(uniforms) {
 
 // Build a (P+1)x(P+1) grid: the extra column/row come from the east/south neighbours so tiles join seamlessly.
 // Works for full tiles (P = 256, 30 m) and coarse overview tiles (P = 16, 480 m); `lookup(zone, i, j)` finds neighbours.
+// The outer vertices sit on the tile boundary (not the edge pixels' centres), so a tile meets its neighbours exactly
+// whatever their resolution, and a skirt hangs from every edge to hide the height steps between levels of detail.
+// Coarse tiles draw all their cells (no ownership cut-outs): they lie under the detailed ones, zone 50 below zone 51,
+// so the owning zone still wins where the zones overlap and no gap opens where only one of them has detail.
 export function buildTerrain(tile, lookup, frame, material) {
   const P = tile.P, N = P + 1, res = tile.res, tileM = P * res;
   const east = lookup(tile.zone, tile.i + 1, tile.j);
@@ -199,10 +203,11 @@ export function buildTerrain(tile, lookup, frame, material) {
     else if (r === P) { ref = south ? 2 : 0; rr = south ? 0 : P - 1; }
     const t = refs[ref], k = rr * P + cc;
     srcRef[v] = ref; srcK[v] = k;
-    own[v] = t.own ? t.own[k] : 1;
+    own[v] = t.own && !tile.coarse ? t.own[k] : 1;
     land[v] = t.land ? t.land[k] : 1;
     built[v] = t.built ? t.built[k] : 0; bs[v] = t.bs ? t.bs[k] : 0;
-    const x = tile.x0 + res * c + res / 2, y = tile.y0 + tileM - res * r - res / 2;
+    const x = c === 0 ? tile.x0 : c === P ? tile.x0 + tileM : tile.x0 + res * c + res / 2;
+    const y = r === 0 ? tile.y0 + tileM : r === P ? tile.y0 : tile.y0 + tileM - res * r - res / 2;
     const [wx, wy, wz] = toWorld(frame, tile.zone, x, y, t.z[k]);
     pos[v * 3] = wx; pos[v * 3 + 1] = wy; pos[v * 3 + 2] = wz;
   }
@@ -212,18 +217,43 @@ export function buildTerrain(tile, lookup, frame, material) {
     const a = r * N + c, b = a + 1, d = a + N, e = d + 1;
     idx.set([a, d, b, b, d, e], q); q += 6;
   }
+  // normals of the surface alone, then the skirt: a copy of each edge vertex lowered by `drop` (same attributes and
+  // normal, so it shades like the ground above it), joined to the edge on both faces
+  const g0 = new THREE.BufferGeometry();
+  g0.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g0.setIndex(new THREE.BufferAttribute(idx, 1));
+  g0.computeVertexNormals();
+  const nrm0 = g0.attributes.normal.array;
+  const edges = [[...Array(N).keys()].map(c => c), [...Array(N).keys()].map(c => P * N + c),
+                 [...Array(N).keys()].map(r => r * N), [...Array(N).keys()].map(r => r * N + P)];
+  const nS = 4 * N, nV = N * N + nS, drop = tile.coarse ? 120 : 40;
+  const grow = (a, k) => { const b = new Float32Array(nV * k); b.set(a); return b; };
+  const P2 = grow(pos, 3), NR = grow(nrm0, 3), OW = grow(own, 1), LA = grow(land, 1), BU = grow(built, 1), BS = grow(bs, 1);
+  const sRef = new Uint8Array(nV), sK = new Uint32Array(nV); sRef.set(srcRef); sK.set(srcK);
+  const sIdx = [];
+  let o = N * N;
+  for (const e of edges) {
+    e.forEach((v, i) => {
+      const u = o + i;
+      P2[u * 3] = pos[v * 3]; P2[u * 3 + 1] = pos[v * 3 + 1] - drop; P2[u * 3 + 2] = pos[v * 3 + 2];
+      for (let j = 0; j < 3; j++) NR[u * 3 + j] = nrm0[v * 3 + j];
+      OW[u] = own[v]; LA[u] = land[v]; BU[u] = built[v]; BS[u] = bs[v]; sRef[u] = srcRef[v]; sK[u] = srcK[v];
+      if (i) { const a = e[i - 1], b = v, c = u - 1, d = u; sIdx.push(a, c, b, b, c, d, a, b, c, b, d, c); }
+    });
+    o += N;
+  }
+  const allIdx = new Uint32Array(idx.length + sIdx.length); allIdx.set(idx); allIdx.set(sIdx, idx.length);
   const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setIndex(new THREE.BufferAttribute(idx, 1));
-  geo.computeVertexNormals();
-  for (const name of ['aFa', 'aFb', 'aNa', 'aNb']) geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(N * N), 1));
-  geo.setAttribute('aOwn', new THREE.BufferAttribute(own, 1));
-  geo.setAttribute('aLand', new THREE.BufferAttribute(land, 1));
-  geo.setAttribute('aBuilt', new THREE.BufferAttribute(built, 1));
-  geo.setAttribute('aBs', new THREE.BufferAttribute(bs, 1));
+  geo.setAttribute('position', new THREE.BufferAttribute(P2, 3));
+  geo.setAttribute('normal', new THREE.BufferAttribute(NR, 3));
+  geo.setIndex(new THREE.BufferAttribute(allIdx, 1));
+  for (const name of ['aFa', 'aFb', 'aNa', 'aNb']) geo.setAttribute(name, new THREE.BufferAttribute(new Float32Array(nV), 1));
+  geo.setAttribute('aOwn', new THREE.BufferAttribute(OW, 1));
+  geo.setAttribute('aLand', new THREE.BufferAttribute(LA, 1));
+  geo.setAttribute('aBuilt', new THREE.BufferAttribute(BU, 1));
+  geo.setAttribute('aBs', new THREE.BufferAttribute(BS, 1));
   geo.computeBoundingSphere();
   const mesh = new THREE.Mesh(geo, material);
-  mesh.userData = { tile, refs, srcRef, srcK };
+  mesh.userData = { tile, refs, srcRef: sRef, srcK: sK };
   return mesh;
 }
 

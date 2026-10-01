@@ -245,6 +245,20 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   Zhunan 41 → 21 % (2020–22), Fab 14 Tainan 37 → 20 % (1998, the ring fell too); AP7 Chiayi was farmland (crops read as
   partial cover) and Fab 22 a refinery (16 → 8 %). On phones, story mode hides the header's weather/stats rows, the legend
   and camera buttons, pulls the camera back 1.6× and shifts the image up (`setViewOffset`) above the card.
+- **Social previews (2026-10-01):** crawlers don't run JS and GitHub Pages serves one `index.html` for every query, so
+  each story has a static share page `site/s/<id>/index.html` (its own og:/twitter: title, description and image; it
+  forwards at once to `../../?story=<id>` plus any at/d/az/el/from/lang on the link) and a 1200×630 preview
+  `site/og/<id>.jpg`: the app's own render (headless, `?ui=0` capture mode hides panels and the pin, `trees=1`, clear
+  10:30, at 0.45 × the story distance) of the year before the clearing (left) and the last year (right), with the name,
+  the measured drop and credits. `site/og/default.jpg` and og tags on `index.html` cover the app. "Share this story"
+  links to `s/<id>/`. Custom views keep the story's standard image (a per-view image would need a server). Regenerate
+  after story changes: `uv run pipeline/og/render_og.py` (needs agent-browser, network, macOS STHeiti fonts;
+  `--pages-only`, `--only id,id`).
+- **Terrain seams (2026-10-01):** tile meshes put their outer vertices on the tile boundary (not the edge pixels'
+  centres: detailed tiles stopped 15 m and coarse ones 240 m short, so detail-next-to-coarse showed the sea through
+  strips up to ~225 m) and hang a skirt (40 m detail, 120 m coarse) from every edge. Coarse tiles draw all cells (no
+  ownership cut-outs) at −1.5 m (zone 51) / −3 m (zone 50), so the owner still wins in the overlap band and a zone-50
+  detail tile's cut-outs are filled by zone 51's coarse cells.
 - **Story framing (2026-10-01):** every story opens on the fab and its neighbourhood, after the user's chosen Fab 14 view
   (`?story=tsmc-fab14&d=11837&az=160&el=48`): heading 160°, tilt 48°, distance 11.8 km × √(site ha / 84) within
   7–12.5 km (`build_stories.py`); phones ×1.6 up to 16 km. The load wait covers the site plus 0.35 × that distance.

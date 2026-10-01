@@ -26,6 +26,7 @@ const YEARS_PER_SEC = 0.8;
 const LOW_SCENES = 5;
 const $ = (id) => document.getElementById(id);
 applyDom();
+if (params.get('ui') === '0') document.body.classList.add('clean');   // capture mode (preview images): no panels
 
 // Foldable panels: a chevron button toggles .folded on its panel (CSS hides the .fold-body parts). The header details
 // and the timeline legend start folded to leave the view open; the choice is remembered in this browser, except for the
@@ -180,7 +181,7 @@ async function load() {
       const look = (z, i, j) => ds.overview.get(`${z}_${i}_${j}`);
       for (const t of ds.overview.values()) {
         const m = buildTerrain(t, look, frame, terrainMat);
-        m.position.y = -1.5;             // sits just under detailed tiles while both exist
+        m.position.y = t.zone === DISPLAY_ZONE ? -1.5 : -3;   // under detailed tiles; zone 51 over zone 50 (owner wins)
         coarse.set(t.key, m); terrain.push(m); scene.add(m);
       }
     }
@@ -788,7 +789,7 @@ const story = new Story({
 });
 function openShared(v) {
   const [wx, wy, wz] = viewLonLat(v.lon, v.lat, v.d, v.el, v.az);
-  pin.position.set(wx, wy, wz); pin.visible = true;
+  pin.position.set(wx, wy, wz); pin.visible = !document.body.classList.contains('clean');
   const [X, Y] = lonLatToUtm(v.lon, v.lat, DISPLAY_ZONE);
   if (entryDisplay(X, Y)) { selectWorld(wx, wz); status(t('shared', v.lat.toFixed(5), v.lon.toFixed(5))); }
   else status(outside(), true);
