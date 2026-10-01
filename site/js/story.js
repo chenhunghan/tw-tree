@@ -9,6 +9,7 @@ import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { t, pickLang, lang } from './i18n.js';
+import { Unicorns } from './unicorns.js';
 
 const $ = (id) => document.getElementById(id);
 const SLOW = 0.5, MID = 1.2;                   // years per second: through the clearing and around each building's year / else
@@ -26,6 +27,7 @@ export class Story {
     this.shellMat = new THREE.MeshLambertMaterial({ color: 0xe0a46a, transparent: true, opacity: 0.38, depthWrite: false });
     this.edgeMat = new THREE.LineBasicMaterial({ color: 0x34424a, transparent: true, opacity: 0.85 });
     this.shellEdge = new THREE.LineBasicMaterial({ color: 0xb4632a, transparent: true, opacity: 0.85 });
+    this.unicorns = new Unicorns(app.scene); this.revCum = null;
     this.labels = document.createElement('div'); this.labels.id = 'storyLabels'; document.body.appendChild(this.labels);
     this.mat = new LineMaterial({ color: 0xd9480f, linewidth: 3, depthTest: false, transparent: true, opacity: 0.95 });
     this.mat.resolution.set(innerWidth, innerHeight);
@@ -83,7 +85,7 @@ export class Story {
   }
 
   close() {
-    this.cur = null; this.ring = null; this.waiting = 0; $('storyWait').hidden = true; $('story').hidden = true; $('creditsStory').hidden = true;
+    this.cur = null; this.ring = null; this.waiting = 0; this.unicorns.clear(); this.revCum = null; $('storyWait').hidden = true; $('story').hidden = true; $('creditsStory').hidden = true;
     this.clearBuildings(); this.app.refreshCity();
     document.body.classList.remove('story-mode'); this.app.layout();
     if (this.line) { this.app.scene.remove(this.line); this.line.geometry.dispose(); this.line = null; }
@@ -178,9 +180,72 @@ export class Story {
     }
   }
 
-  // Every frame: grow buildings with the (continuous) year and place labels.
-  tick(camera, yearF) {
-    if (!this.cur || !this.blds.length) return;
+  // Estimated revenue (US$ bn) earned by the continuous year yf. Year Y is earned while the timeline shows Y
+  // (yf in [Y - 0.5, Y + 0.5)), month by month when the estimate is monthly (r.months[i]: 12 values, US$ bn).
+  revenueAt(yf) {
+    const r = this.cur?.revenue;
+    if (!r) return 0;
+    let sum = 0;
+    r.years.forEach((y, i) => {
+      if (yf >= y + 0.5) { sum += r.usd[i]; return; }
+      if (yf <= y - 0.5) return;
+      const f = (yf - y + 0.5) * 12, m = r.months?.[i];
+      if (!m) { sum += r.usd[i] * f / 12; return; }
+      const mi = Math.min(11, Math.floor(f));
+      for (let k = 0; k < mi; k++) sum += m[k];
+      sum += m[mi] * (f - mi);
+    });
+    return sum;
+  }
+
+  // The month the continuous year yf is in: [year index, month 0-11]
+  monthAt(yf) {
+    const r = this.cur?.revenue, y = Math.round(yf), i = r ? r.years.indexOf(y) : -1;
+    return [i, Math.max(0, Math.min(11, Math.floor((yf - y + 0.5) * 12)))];
+  }
+
+  // One unicorn per US$1 bn of estimated revenue: when the cumulative total passes the next billion while the
+  // timeline plays forward, one flies out of a random standing fab roof (a jump back or a replay only resets the count).
+  #unicorns(camera, yearF, dt) {
+    const cum = this.revenueAt(yearF), k = Math.floor(cum);
+    if (this.revCum === null || yearF < this.revYear || yearF - this.revYear > 1.5) this.revCum = k;
+    const due = k - this.revCum;
+    this.revCum = k; this.revYear = yearF;
+    if (due > 0) {
+      const roofs = this.blds.filter(o => o.mesh.visible && o.mesh.scale.y > 0.6 && !o.b.construction);
+      for (let i = 0; i < Math.min(due, 8); i++) {
+        let o;
+        if (roofs.length) { const r = roofs[Math.floor(Math.random() * roofs.length)]; o = new THREE.Vector3(r.top.x, r.mesh.position.y + (r.top.y - r.mesh.position.y), r.top.z); }
+        else { const c = this.cur, [x, y, z] = this.app.ground(c.lon, c.lat); o = new THREE.Vector3(x, y + 30, z); }
+        this.unicorns.spawn(o, Math.max(8, camera.position.distanceTo(o) * 0.016));
+      }
+    }
+    this.unicorns.update(dt, camera.position);
+    const el = $('storyUni');
+    if (el && this.cur?.revenue) el.textContent = k > 0 ? t('sUnicorns', k) : '';
+    if (this.cur?.revenue) this.#revNow(yearF);
+  }
+
+  // The revenue readout for the month shown (estimate, its likely range, total so far) and the chart's marker.
+  #revNow(yf) {
+    const r = this.cur.revenue, [i, mo] = this.monthAt(yf), y = Math.round(yf), key = `${y}-${mo}-${lang}`;
+    if (key === this.revShown) return;
+    this.revShown = key;
+    const f = this.revenueFmt, ann = i < 0 ? 0 : r.usd[i];
+    const v = i < 0 ? 0 : r.months ? r.months[i][mo] : ann / 12, kLo = ann ? (r.lo?.[i] ?? ann) / ann : 1, kHi = ann ? (r.hi?.[i] ?? ann) / ann : 1;
+    const when = new Date(Date.UTC(y, mo, 1)).toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-US', { year: 'numeric', month: 'short', timeZone: 'UTC' });
+    const cum = this.revenueAt(yf);                // no revenue that month: no readout (and no unicorns)
+    $('storyRevNow').innerHTML = [v > 0 ? t('sRevNow', when, f(v), f(v * kLo), f(v * kHi)) : '', cum > 0 ? t('sRevCum', f(cum)) : ''].filter(Boolean).join(' · ');
+    const rl = $('storyRevYear');
+    if (rl) { const x = this.rxp(y - 0.5 + (mo + 0.5) / 12); rl.setAttribute('x1', x); rl.setAttribute('x2', x); }
+  }
+
+  // Every frame: grow buildings with the (continuous) year, place labels, fly unicorns.
+  tick(camera, yearF, dt) {
+    dt = Math.min(0.1, dt);
+    if (!this.cur) { this.unicorns.update(dt, camera.position); return; }
+    this.#unicorns(camera, yearF, dt);
+    if (!this.blds.length) return;
     const v = new THREE.Vector3(), w = innerWidth, h = innerHeight, placed = [];
     for (const o of this.blds) {                   // largest first: a label overlapping one already placed is hidden
       const g = THREE.MathUtils.smoothstep(yearF, o.b.year - 0.8, o.b.year + 0.2);
@@ -229,6 +294,39 @@ export class Story {
     $('storyLegend').innerHTML = `<span><i style="background:var(--loss)"></i>${t('sSite')}</span><span><i style="background:#8c8c86"></i>${t('sRing', this.data.ring_m)}</span>`
       + `<span><i style="background:#f6e3d3;height:8px;vertical-align:-1px"></i>${t('sLegendChange')}</span>`;
     this.chart();
+    this.revChart();
+  }
+
+  // Estimated revenue bars (US$ bn per year) on the tree chart's years, with the likely range as a whisker.
+  revChart() {
+    const r = this.cur.revenue;
+    $('storyRev').hidden = !r;
+    this.revenueFmt = (v) => (lang === 'zh' ? Math.round(v * 10).toLocaleString() : v >= 10 ? Math.round(v).toLocaleString() : v.toFixed(1));
+    if (!r) return;
+    $('storyRevTitle').textContent = t('sRevTitle');
+    $('storyRevNote').textContent = pickLang(r, 'note');
+    const all = this.data.years, s = this.cur, W = 300, H = 64, pad = 4;
+    const lo = Math.max(all[0], Math.min(s.change[0] - 15, all[all.length - 1] - 20)), hiY = all[all.length - 1];
+    const xp = (y) => pad + (W - 2 * pad) * (y - lo) / (hiY - lo);
+    const idx = r.years.map((y, i) => i).filter(i => r.years[i] >= lo && r.years[i] <= hiY);
+    const top = Math.max(1, ...idx.map(i => Math.max(r.hi?.[i] ?? r.usd[i], r.months ? 12 * Math.max(...r.months[i]) : 0)));
+    const yp = (v) => H - 10 - (H - 14) * v / top, bw = Math.max(1.5, (W - 2 * pad) / (hiY - lo + 1) * 0.66);
+    $('storyRevChart').setAttribute('aria-label', t('sRevAria'));
+    const mw = (W - 2 * pad) / (hiY - lo + 1) / 12;
+    $('storyRevChart').innerHTML = idx.map(i => {
+      const x = xp(r.years[i]), v = r.usd[i];
+      if (r.months) {                          // monthly bars (heights in the yearly scale x 12) under the year's range
+        const k12 = 12, band = r.hi ? `<rect x="${(x - 6 * mw).toFixed(1)}" y="${yp(r.hi[i]).toFixed(1)}" width="${(12 * mw).toFixed(1)}" height="${Math.max(0, yp(r.lo[i]) - yp(r.hi[i])).toFixed(1)}" fill="#e2b93b" fill-opacity="0.16"/>` : '';
+        return band + r.months[i].map((m, k) => `<rect x="${(x + (k - 6) * mw).toFixed(2)}" y="${yp(m * k12).toFixed(1)}" width="${Math.max(0.4, mw * 0.8).toFixed(2)}" height="${Math.max(0, H - 10 - yp(m * k12)).toFixed(1)}" fill="#e2b93b"/>`).join('');
+      }
+      const whisk = r.hi ? `<line x1="${x}" x2="${x}" y1="${yp(r.hi[i])}" y2="${yp(r.lo[i])}" stroke="#c9a227" stroke-opacity="0.55" vector-effect="non-scaling-stroke"/>` : '';
+      return `<rect x="${(x - bw / 2).toFixed(1)}" y="${yp(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, H - 10 - yp(v)).toFixed(1)}" fill="#e2b93b" rx="0.6"/>` + whisk;
+    }).join('')
+      + `<text x="${pad + 1}" y="8" font-size="8" fill="#999">${lang === 'zh' ? `${this.revenueFmt(top)} 億美元` : `US$${this.revenueFmt(top)} bn`}</text>`
+      + `<line x1="${pad}" x2="${W - pad}" y1="${H - 10}" y2="${H - 10}" stroke="#ccc" vector-effect="non-scaling-stroke"/>`
+      + `<line id="storyRevYear" y1="0" y2="${H - 10}" stroke="#d9480f" stroke-width="1" vector-effect="non-scaling-stroke"/>`
+      + `<text x="${pad}" y="${H - 1}" font-size="8" fill="#999">${lo}</text><text x="${W - pad}" y="${H - 1}" font-size="8" fill="#999" text-anchor="end">${hiY}</text>`;
+    this.rxp = (y) => (y < lo ? -10 : xp(y)); this.revShown = '';
   }
 
   chart() {

@@ -909,14 +909,14 @@ function step(dt, now = performance.now()) {
   if (Math.floor(now / 100) !== Math.floor((now - dt * 1000) / 100)) drawMinimap();
   if (weather.auto && Math.floor(now / 250) !== Math.floor((now - dt * 1000) / 250)) { $('hour').value = weather.hour; $('hourVal').textContent = weather.label; }
   pin.scale.setScalar(Math.max(1, camera.position.distanceTo(pin.position) / 2500));
-  story.tick(camera, uniforms.uYearF.value);
+  story.tick(camera, uniforms.uYearF.value, dt);
 }
 
 // Testing hook: step without requestAnimationFrame (headless screenshots).
 window.__app = {
   setYear: (y) => { playing = false; updatePlayButton(); setYearPos(years.indexOf(y)); },
   advance: (sec) => { for (let i = 0; i < sec * 30; i++) step(1 / 30); composer.render(); },
-  setMiniature, setFov, weather, renderer, sun, forest, scene, city, camera, controls, composer, detail, coarse,
+  setMiniature, setFov, weather, renderer, sun, forest, scene, city, story, camera, controls, composer, detail, coarse,
   camAngles: () => ({ az: controls.getAzimuthalAngle(), pol: controls.getPolarAngle() }),
   flyTo, get trees() { return forest.count; }, get buildings() { return city.n; }, get treeStats() { return { ...forest.stats, triangles: Math.round(forest.triangles) }; }, get treeQ() { return treeQ; },
   renderInfo: () => renderer.info.render,

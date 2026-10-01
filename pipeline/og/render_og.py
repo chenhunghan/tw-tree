@@ -13,7 +13,9 @@ For each story in site/stories/<collection>.json:
 and site/og/default.jpg for the app itself.
 
 usage: uv run pipeline/og/render_og.py [--collection tsmc] [--only id,id] [--pages-only]
-Needs agent-browser (Chrome) and network access to the tile data; fonts: macOS STHeiti.
+Images and pages are in English (social sites show one language); the headline is the measured tree-cover drop 🌳
+vs the site's estimated revenue in unicorns 🦄 (1 = US$1 bn, as in the app), and the "after" half shows them flying.
+Needs agent-browser (Chrome) and network access to the tile data; fonts: macOS STHeiti, Apple Color Emoji.
 """
 import argparse, functools, html, http.server, json, pathlib, subprocess, threading, time
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
@@ -24,6 +26,7 @@ BASE = 'https://chenhunghan.github.io/tw-tree/'
 W, H = 1200, 630
 FONT_B = '/System/Library/Fonts/STHeiti Medium.ttc'
 FONT_L = '/System/Library/Fonts/STHeiti Light.ttc'
+FONT_EMOJI = '/System/Library/Fonts/Apple Color Emoji.ttc'     # bitmap strikes only: rendered at 160 px, then scaled
 SESSION = 'tpetree-og'
 
 ap = argparse.ArgumentParser()
@@ -61,15 +64,27 @@ def wait(expr, limit=90):
         time.sleep(1)
     return False
 
+# a flock of the app's unicorns in mid-flight out of the site's standing roofs (spawned at staggered times)
+UNICORN_JS = """(() => { const a = window.__app, st = a.story;
+  const roofs = st.blds.filter(o => o.mesh.visible && !o.b.construction).sort((p, q) => q.b.area - p.b.area).slice(0, 8);
+  if (!roofs.length) return 0;
+  for (let i = 0; i < 12; i++) {
+    const o = roofs[i % roofs.length], top = o.top.clone();
+    st.unicorns.spawn(top, Math.max(8, a.camera.position.distanceTo(top) * 0.016));
+    a.advance(0.28);
+  }
+  return st.unicorns.flying; })()"""
+
 def capture(url, shots):
-    """Open url and save one screenshot per (year, path)."""
+    """Open url and save one screenshot per (year, path[, js to run before the shot])."""
     ab('open', url)
     wait('!!window.__app?.ready')
     wait("(() => { const w = document.getElementById('storyWait'); return !w || w.hidden; })()")
     time.sleep(3)
-    for year, path in shots:
+    for year, path, *pre in shots:
         js(f'(() => {{ window.__app.setYear({year}); window.__app.advance(0.4); return 1; }})()')
         time.sleep(3)
+        for p in pre: js(p)
         ab('screenshot', str(path))
 
 
@@ -89,23 +104,52 @@ def pill(d, xy, text, f, fill=(250, 250, 245), ink=(29, 42, 34)):
     d.rounded_rectangle((x, y, x + r - l + 28, y + b - t + 18), radius=14, fill=fill)
     d.text((x + 14 - l, y + 9 - t), text, font=f, fill=ink)
 
+def emoji(img, ch, xy, size):
+    """Paste one colour emoji with its top-left at xy, `size` px tall."""
+    f = ImageFont.truetype(FONT_EMOJI, 160)
+    tile = Image.new('RGBA', (200, 200), (0, 0, 0, 0))
+    ImageDraw.Draw(tile).text((0, 0), ch, font=f, embedded_color=True)
+    tile = tile.crop(tile.getbbox()).resize((size, size), Image.LANCZOS)
+    img.paste(tile, xy, tile)
+
+def run(img, x, y, parts, size):
+    """Draw a line of text and emoji runs: ('t', text, font, fill) or ('e', emoji); returns the end x."""
+    d = ImageDraw.Draw(img)
+    for p in parts:
+        if p[0] == 'e':
+            emoji(img, p[1], (int(x), int(y + size * 0.02)), size); x += size * 1.12
+        else:
+            d.text((x, y), p[1], font=p[2], fill=p[3]); x += d.textlength(p[1], font=p[2])
+    return x
+
+def revenue_bn(s):
+    """The site's estimated revenue (US$ bn) through the last year of the timeline, or None."""
+    r = s.get('revenue')
+    if not r: return None
+    return sum(v for y, v in zip(r['years'], r['usd']) if y <= doc['years'][-1])
+
 def compose(s, before, after, out):
     A, B = Image.open(before).convert('RGB'), Image.open(after).convert('RGB')
     img = Image.new('RGB', (W, H))
     img.paste(A.crop((W // 4, 0, W // 4 + W // 2, H)), (0, 0))         # centre half of each view
     img.paste(B.crop((W // 4, 0, W // 4 + W // 2, H)), (W // 2, 0))
     shade(img, (0, 0, W, 120), 150, 0)
-    shade(img, (0, H - 190, W, H), 0, 225)
+    shade(img, (0, H - 210, W, H), 0, 230)
     d = ImageDraw.Draw(img)
     d.line((W // 2, 0, W // 2, H), fill=(250, 250, 245), width=4)
     y0, y1 = s['before'][1], doc['years'][-1]
     pill(d, (24, 22), str(y0), font(FONT_B, 40))
     pill(d, (W // 2 + 24, 22), str(y1), font(FONT_B, 40), fill=(217, 72, 15), ink=(255, 255, 255))
-    d.text((32, H - 168), s['zh'], font=font(FONT_B, 46), fill=(255, 255, 255))
-    d.text((34, H - 112), s['en'], font=font(FONT_L, 28), fill=(225, 232, 226))
-    sb, sa = round(s['site_before']), round(s['site_after'])
-    d.text((34, H - 66), f'樹冠 Tree cover {sb}% → {sa}%  /  約 {round(s["lost_ha"])} 公頃 (ha) 消失 lost',
-           font=font(FONT_B, 28), fill=(255, 214, 170))
+    sb, sa, bn = round(s['site_before']), round(s['site_after']), revenue_bn(s)
+    big, white, gold = font(FONT_B, 54), (255, 255, 255), (255, 214, 120)
+    parts = [('e', '🌳'), ('t', f' {sb}% → {sa}%', big, white)]
+    if bn and bn >= 1: parts += [('t', '   vs   ', font(FONT_L, 40), (225, 232, 226)), ('e', '🦄'), ('t', f' × {int(bn):,}', big, gold)]
+    run(img, 32, H - 190, parts, 54)
+    d.text((34, H - 112), s['en'], font=font(FONT_B, 32), fill=(240, 244, 240))
+    small = (font(FONT_L, 25), (255, 214, 170))
+    parts = [('t', f"{round(s['lost_ha'])} ha of tree canopy lost", *small)]
+    if bn and bn >= 1: parts += [('t', f"  ·  est. US${int(bn):,} bn revenue (1 ", *small), ('e', '🦄'), ('t', ' = US$1 bn)', *small)]
+    run(img, 34, H - 64, parts, 25)
     credit = 'Landsat USGS  /  ESA WorldCover  /  © OpenStreetMap  /  tw-tree'
     f = font(FONT_L, 15); w = d.textlength(credit, font=f)
     d.text((W - w - 18, H - 26), credit, font=f, fill=(200, 210, 204))
@@ -115,22 +159,23 @@ def compose_default(shot, out):
     img = Image.open(shot).convert('RGB').resize((W, H))
     shade(img, (0, H - 230, W, H), 0, 225)
     d = ImageDraw.Draw(img)
-    d.text((34, H - 200), '臺灣樹冠時光機', font=font(FONT_B, 64), fill=(255, 255, 255))
-    d.text((36, H - 118), 'Taiwan Tree-Cover Time Machine  /  1984–2026', font=font(FONT_L, 32), fill=(225, 232, 226))
-    d.text((36, H - 70), '每 30 公尺、每一年的樹冠，3D 時間軸  /  every 30 m pixel, every year, in 3D', font=font(FONT_B, 24), fill=(255, 214, 170))
+    run(img, 34, H - 196, [('e', '🌳'), ('t', ' Taiwan Tree-Cover Time Machine', font(FONT_B, 58), (255, 255, 255))], 58)
+    d.text((36, H - 112), '1984–2026  ·  every 30 m Landsat pixel, every year, in 3D', font=font(FONT_L, 32), fill=(225, 232, 226))
+    run(img, 36, H - 66, [('t', 'Plus TSMC fab stories: tree cover lost vs revenue in ', font(FONT_B, 24), (255, 214, 170)), ('e', '🦄'),
+                          ('t', ' (1 = US$1 bn)', font(FONT_B, 24), (255, 214, 170))], 24)
     img.save(out, quality=86, optimize=True, progressive=True)
 
 
 # ---------- share pages ----------
 PAGE = """<!doctype html>
-<html lang="zh-Hant-TW">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{title}</title>
 <meta name="description" content="{desc}">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="臺灣樹冠時光機 · Taiwan Tree-Cover Time Machine">
+<meta property="og:site_name" content="Taiwan Tree-Cover Time Machine">
 <meta property="og:title" content="{title}">
 <meta property="og:description" content="{desc}">
 <meta property="og:image" content="{image}">
@@ -154,9 +199,13 @@ PAGE = """<!doctype html>
 
 def page(s):
     sb, sa = round(s['site_before']), round(s['site_after'])
-    title = f"{s['zh']}：樹冠 {sb}% → {sa}% · {s['en']}"
-    desc = (f"{s['before'][0]}–{s['before'][1]} 年樹冠 {sb}%，{s['after'][0]}–{s['after'][1]} 年 {sa}%，約 {round(s['lost_ha'])} 公頃消失。"
-            f" Tree cover {sb}% → {sa}%, about {round(s['lost_ha'])} ha lost. 3D Landsat timeline 1984–2026.")
+    bn = revenue_bn(s)
+    title = f"🌳 {sb}% → {sa}%" + (f" vs 🦄 × {int(bn):,}" if bn and bn >= 1 else '') + f" · {s['en']}"
+    a0, a1 = s['after']
+    desc = (f"Tree cover inside the site averaged {sb}% in {s['before'][0]}–{s['before'][1]} and {sa}% in "
+            f"{a0 if a0 == a1 else f'{a0}–{a1}'}: about {round(s['lost_ha'])} ha of canopy lost."
+            + (f" Estimated revenue since: about US${int(bn):,} bn, one 🦄 per billion." if bn and bn >= 1 else '')
+            + " 3D Landsat timeline 1984–2026.")
     e = lambda x: html.escape(x, quote=True)
     out = SITE / 's' / s['id']; out.mkdir(parents=True, exist_ok=True)
     (out / 'index.html').write_text(PAGE.format(title=e(title), desc=e(desc), image=f"{BASE}og/{s['id']}.jpg",
@@ -173,13 +222,13 @@ if not a.pages_only:
     for s in stories:
         b, f = tmp / f"{s['id']}_before.png", tmp / f"{s['id']}_after.png"
         # closer than the story's opening view: each half is only 600 px wide, the fab should fill it
-        capture(f"{base}?story={s['id']}&ui=0&lang=zh&weather=clear&hour=10.5&trees=1&d={round(s['d'] * 0.45)}&el=50",
-                [(s['before'][1], b), (doc['years'][-1], f)])
+        capture(f"{base}?story={s['id']}&ui=0&lang=en&weather=clear&hour=10.5&trees=1&d={round(s['d'] * 0.45)}&el=50",
+                [(s['before'][1], b), (doc['years'][-1], f, *([UNICORN_JS] if revenue_bn(s) else []))])
         compose(s, b, f, SITE / 'og' / f"{s['id']}.jpg")
         print('og', s['id'])
     if not a.only:
         d = tmp / 'default.png'
-        capture(f"{base}?ui=0&lang=zh&weather=clear&hour=9.5&trees=1&at=24.86,121.53&d=2600&az=150&el=24&y=2024", [(2024, d)])
+        capture(f"{base}?ui=0&lang=en&weather=clear&hour=9.5&trees=1&at=24.86,121.53&d=2600&az=150&el=24&y=2024", [(2024, d)])
         compose_default(d, SITE / 'og' / 'default.jpg')
         print('og default')
     ab('close')

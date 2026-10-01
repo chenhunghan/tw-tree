@@ -3,17 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>臺灣樹冠時光機</title>
-<meta name="description" data-i18n-content="desc" content="1984–2026 年臺灣樹冠覆蓋的 3D 時間軸，資料來自 Landsat 衛星。">
+<title>Taiwan Tree-Cover Time Machine</title>
+<meta name="description" data-i18n-content="desc" content="A 3D timeline of tree cover in Taiwan, 1984–2026, from Landsat satellite imagery.">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="臺灣樹冠時光機 · Taiwan Tree-Cover Time Machine">
-<meta property="og:title" content="臺灣樹冠時光機 · Taiwan Tree-Cover Time Machine 1984–2026">
-<meta property="og:description" content="1984–2026 年臺灣每 30 公尺的樹冠變化，3D 時間軸（Landsat 衛星）。Tree cover of Taiwan, every 30 m pixel, every year since 1984, in 3D.">
+<meta property="og:site_name" content="Taiwan Tree-Cover Time Machine">
+<meta property="og:title" content="🌳 Taiwan Tree-Cover Time Machine 1984–2026">
+<meta property="og:description" content="Tree cover of Taiwan, every 30 m Landsat pixel, every year since 1984, in 3D. Plus TSMC fab stories: canopy lost vs estimated revenue, one 🦄 per US$1 bn.">
 <meta property="og:image" content="https://chenhunghan.github.io/tw-tree/og/default.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta property="og:url" content="https://chenhunghan.github.io/tw-tree/">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="🌳 Taiwan Tree-Cover Time Machine 1984–2026">
+<meta name="twitter:description" content="Tree cover of Taiwan, every 30 m Landsat pixel, every year since 1984, in 3D. Plus TSMC fab stories: canopy lost vs estimated revenue, one 🦄 per US$1 bn.">
 <meta name="twitter:image" content="https://chenhunghan.github.io/tw-tree/og/default.jpg">
 <script type="importmap">
 {
@@ -96,6 +98,12 @@
   #storyNow .phase { margin-left: auto; padding: 2px 8px; border-radius: 9px; background: #e6efe2; color: var(--accent); font-size: 12px; }
   #storyNow .phase.change { background: #f6e3d3; color: var(--loss); }
   #storyChart { width: 100%; height: 92px; display: block; margin-top: 6px; }
+  #storyRev { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--line); }
+  #storyRev .rev-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--muted); }
+  #storyUni { margin-left: auto; font-weight: 700; color: #9c36b5; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #storyRevNow { font-size: 12.5px; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  #storyRevNow b { font-size: 15px; } #storyRevNow .rng { color: var(--muted); font-size: 11.5px; }
+  #storyRevChart { width: 100%; height: 64px; display: block; margin-top: 4px; }
   #storyWait { left: 50%; top: 46%; transform: translate(-50%, -50%); padding: 9px 16px; font-size: 13px; font-weight: 600; border-radius: 20px; }
   #storyLabels { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
   .panel { z-index: 2; }
@@ -144,7 +152,7 @@
     body.story-mode #timeline .legend > span:not(:last-child) { display: none; }
     body.story-mode #side { bottom: calc(118px + env(safe-area-inset-bottom, 0px)); max-height: 46vh; }
     body.story-mode #credits { display: none; }
-    #storyChart { height: 64px; }
+    #storyChart { height: 64px; } #storyRevChart { height: 44px; } #storyRevNote { display: none; }
     .stat { gap: 10px; }
   }
 </style>
@@ -192,6 +200,12 @@
   <svg id="storyChart" class="fold-body" viewBox="0 0 300 92" preserveAspectRatio="none" role="img"></svg>
   <div class="trend-legend fold-body" id="storyLegend"></div>
   <p id="storySummary" class="fold-body"></p>
+  <div id="storyRev" hidden>
+    <div class="rev-head"><span id="storyRevTitle" class="fold-body"></span><span id="storyUni"></span></div>
+    <div id="storyRevNow"></div>
+    <svg id="storyRevChart" class="fold-body" viewBox="0 0 300 64" preserveAspectRatio="none" role="img"></svg>
+    <p class="note fold-body" id="storyRevNote"></p>
+  </div>
   <div class="story-actions fold-body"><button type="button" id="storyReplay" class="primary"></button><button type="button" id="storyShare"></button>
     <select id="storyPick"></select></div>
   <p class="note fold-body" id="storyNote"></p>
