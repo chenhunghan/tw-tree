@@ -81,20 +81,35 @@ function leafAtlas() {
   spray(CELL.broad, { leaves: 420, len: 19, wid: 7.5, twigs: 9 });
   spray(CELL.acacia, { leaves: 460, len: 24, wid: 3.2, twigs: 9 });
   spray(CELL.bamboo, { leaves: 260, len: 34, wid: 4.5, droop: 0.5 });
-  { // conifer: flat sprays of short needles along forked branchlets
+  { // conifer: one branch spray along the cell's u axis (the card runs along a branch): a stem, alternating
+    // branchlets that shorten toward the tip, short needles on both; tips lighter (new growth)
     const [ox, oy] = cellOrigin(CELL.needle);
     g.save(); g.translate(ox, oy); g.beginPath(); g.rect(0, 0, S, S); g.clip();
-    for (let t = 0; t < 22; t++) {
-      const a0 = (t / 22) * Math.PI * 2 + R() * 0.3, L = 60 + R() * 55;
-      for (let s = 0; s < 40; s++) {
-        const u = s / 40, px = S / 2 + Math.cos(a0) * L * u, py = S / 2 + Math.sin(a0) * L * u;
-        for (const side of [-1, 1]) {
-          const a = a0 + side * (0.8 + R() * 0.4), l = 10 + R() * 9, v = Math.round(170 + 85 * R());
-          g.strokeStyle = `rgb(${v},${v},${v})`; g.lineWidth = 2.6;
-          g.beginPath(); g.moveTo(px, py); g.lineTo(px + Math.cos(a) * l, py + Math.sin(a) * l); g.stroke();
-        }
+    g.lineCap = 'round';
+    const needles = (x0, y0, x1, y1, len, k0, k1, n) => {
+      const dx = x1 - x0, dy = y1 - y0, L = Math.hypot(dx, dy), ux = dx / L, uy = dy / L;
+      for (let s = 0; s < n; s++) {
+        const u = s / n, px = x0 + dx * u, py = y0 + dy * u, side = s % 2 ? 1 : -1;
+        const a = side * (0.75 + R() * 0.4), c = Math.cos(a), sn = Math.sin(a), l = len * (1 - 0.35 * u) * (0.75 + 0.45 * R());
+        const v = Math.round(150 + (k0 + (k1 - k0) * u) * 95 * (0.75 + 0.3 * R()));
+        g.strokeStyle = `rgb(${v},${v},${v})`; g.lineWidth = 2.3 * (0.8 + 0.4 * R());
+        g.beginPath(); g.moveTo(px, py); g.lineTo(px + (ux * c - uy * sn) * l, py + (ux * sn + uy * c) * l); g.stroke();
       }
+    };
+    const stem = [];
+    for (let s = 0; s <= 24; s++) { const t = s / 24; stem.push([6 + t * 244, S / 2 + Math.sin(t * Math.PI) * 4]); }
+    const twigs = [];
+    for (let s = 2; s < 22; s++) for (const side of [-1, 1]) {
+      const t = s / 24, [x, y] = stem[s];
+      twigs.push({ x, y, t, len: (1 - t * 0.55) * 0.42 * S * (0.75 + 0.3 * R()) + 10, ang: side * (0.55 + 0.35 * R()) });
     }
+    for (const w of twigs) {
+      const x1 = w.x + Math.cos(w.ang) * w.len, y1 = w.y + Math.sin(w.ang) * w.len;
+      g.strokeStyle = 'rgb(120,100,80)'; g.lineWidth = 1.6; g.beginPath(); g.moveTo(w.x, w.y); g.lineTo(x1, y1); g.stroke();
+      needles(w.x, w.y, x1, y1, 15, 0.45 + 0.4 * w.t, 1, Math.round(w.len * 0.9));
+    }
+    for (let s = 0; s < 24; s++) needles(...stem[s], ...stem[s + 1], 19, s / 24 * 0.6, (s + 1) / 24 * 0.6 + 0.2, 10);
+    g.strokeStyle = 'rgb(110,90,70)'; g.lineWidth = 3; g.beginPath(); stem.forEach(([x, y], i) => i ? g.lineTo(x, y) : g.moveTo(x, y)); g.stroke();
     g.restore();
   }
   const tex = new THREE.CanvasTexture(cv);
@@ -157,7 +172,7 @@ function leafCards({ x = 0, y = 0, z = 0, r = 3, sy = 1, n = 20, size = 2, cell 
     const dx = Math.cos(a) * rr, dz = Math.sin(a) * rr, depth = 0.6 + 0.4 * Math.sqrt(R());
     const cx = x + dx * r * depth, cy = y + dy * r * sy * depth, cz = z + dz * r * depth;
     out.set(dx, dy / sy, dz).normalize();
-    nrm.set(dx + (R() - 0.5) * 1.3, dy + 0.35 + (R() - 0.5) * 1.3, dz + (R() - 0.5) * 1.3).normalize();
+    nrm.set(dx + (R() - 0.5) * 1.3, dy + 0.12 + (R() - 0.5) * 1.3, dz + (R() - 0.5) * 1.3).normalize();
     tmp.set(R() - 0.5, R() - 0.5, R() - 0.5); t.crossVectors(nrm, tmp).normalize(); b.crossVectors(nrm, t);
     const h = size * (0.75 + 0.5 * R()) / 2;
     nn.copy(out).multiplyScalar(0.8).addScaledVector(nrm, 0.2).normalize();
@@ -249,40 +264,137 @@ function envelope(clusters) {
 
 // Broadleaf-type species: trunks (near) + leaf clusters. near: a dark core and leaf cards per cluster; mid: the envelope's
 // core with a few large cards; far: the envelope as a solid crown.
-function leafy({ trunks, midTrunk, clusters: cl0, cell = CELL.broad, coreR = 0.62, density = 1.1, grow = 1.25 }) {
+// skirt: a lower ring of clusters (relative size), so the crown is deep and rounded instead of a plate on a stem.
+function leafy({ trunks, midTrunk, clusters: cl0, cell = CELL.broad, coreR = 0.62, density = 1.1, grow = 1.25, skirt = 0 }) {
   const clusters = cl0.map(c => ({ ...c, r: c.r * grow, x: (c.x || 0) * (1 + (grow - 1) * 0.6), z: (c.z || 0) * (1 + (grow - 1) * 0.6) }));
+  if (skirt) {
+    const e0 = envelope(clusters), mr = clusters.reduce((a, c) => a + c.r, 0) / clusters.length;
+    clusters.push(...ring(5, (i, a) => ({ x: e0.x + Math.cos(a + 0.6) * e0.r * 0.52, y: e0.y - e0.r * e0.sy * 0.5, z: e0.z + Math.sin(a + 0.6) * e0.r * 0.52,
+      r: mr * skirt, sy: 0.8, core: false, color: '#' + C(clusters[i % clusters.length].color).multiplyScalar(0.85).getHexString() })));
+  }
   const env = envelope(clusters);
   return {
     near: () => merge([
       ...trunks(),
-      ...clusters.map((c, i) => clump({ ...c, y: c.y + c.r * (c.sy ?? 1) * 0.18, r: c.r * coreR, detail: 0, rough: 0.55, dark: 0.72, seed: i + 3 })),
-      ...clusters.map((c, i) => leafCards({ ...c, n: clampN(c.r * c.r * density, 6, 24), size: c.r * 1.2, cell, seed: i + 1 })),
+      ...clusters.filter(c => c.core !== false).map((c, i) => clump({ ...c, y: c.y + c.r * (c.sy ?? 1) * 0.18, r: c.r * coreR, detail: 0, rough: 0.55, dark: 0.72, seed: i + 3 })),
+      // skirt clusters are cards only (a solid core seen from the side reads as a dark slab)
+      ...clusters.map((c, i) => leafCards({ ...c, n: clampN(c.r * c.r * density * (c.core === false ? 1.5 : 1), 6, 30), size: c.r * 1.2, cell, seed: i + 1 })),
     ]),
     mid: () => merge([
       midTrunk(),
-      clump({ ...env, r: env.r * 0.86, detail: 0, dark: 0.6, seed: 5 }),
-      leafCards({ ...env, n: 16, size: env.r * 0.95, cell, seed: 9 }),
+      clump({ ...env, r: env.r * 0.86, detail: 0, rough: 0.34, dark: 0.62, seed: 5 }),
+      leafCards({ ...env, n: 18, size: env.r * 0.95, cell, seed: 9 }),
     ]),
-    far: () => clump({ ...env, detail: 0, seed: 7, dark: 0.92 }),
+    far: () => clump({ ...env, detail: 0, rough: 0.3, seed: 7, dark: 0.9 }),
   };
 }
 
-// Conifers: stacked tiers. Each tier is a dark solid cone with needle sprays on its outside.
-function conifer({ trunkH, trunkR, tiers, color, alt, needle = true }) {
-  const all = tiers.map(t => ({ ...t, color: t.i % 2 ? alt : color }));
-  const top = tiers[tiers.length - 1], y0 = tiers[0].y, h = top.y + top.h - y0;
+// Conifers grown as real ones are: whorls of branches up the stem, each branch carrying needle sprays.
+// A spray is a card along the branch, folded along its stem (a shallow tent) so it never vanishes edge-on; its normal
+// leans 65 % toward the crown's outward normal so the tree shades as one volume, and baked AO darkens branch bases
+// and the lower crown. A dark core cone fills the gaps between sprays. near: 2 folded cards per branch;
+// mid: every 2nd whorl, one flat card per branch; far: a cone.
+const UP = new THREE.Vector3(0, 1, 0);
+function whorls({ H, crownBase, crownR, seed, profile = 0.95, round = 0, pitch = [0.05, 0.45], droop = [0.62, 0.2], spacing = 1 }) {
+  const R = rng(seed), out = [];
+  for (let y = crownBase; y < H - 0.6;) {
+    const t = (y - crownBase) / (H - crownBase);
+    const prof = (1 - t) ** profile * (0.75 + 0.25 * Math.sin(t * Math.PI)) + round * Math.sin(t * Math.PI) * 0.35 * (1 - t);
+    const n = t > 0.85 ? 4 : 5 + Math.floor(R() * 3), az0 = R() * Math.PI * 2, br = [];
+    for (let i = 0; i < n; i++) br.push({
+      az: az0 + (i / n) * Math.PI * 2 + (R() - 0.5) * 0.7,
+      len: Math.max(0.5, crownR * prof * (0.75 + 0.4 * R()) + 0.4),
+      pitch: pitch[0] + (pitch[1] - pitch[0]) * t + (R() - 0.5) * 0.16,
+      droop: droop[0] + (droop[1] - droop[0]) * t + (R() - 0.5) * 0.2,
+      roll: (R() - 0.5) * 0.5, tone: 0.9 + 0.2 * R(),
+    });
+    out.push({ y, t, br });
+    y += (1.25 - 0.7 * t) * spacing * (0.8 + 0.4 * R());
+  }
+  return out;
+}
+const branchAt = (w, b, u, r0, v) => v.set(Math.cos(b.az) * (r0 + b.len * u), w.y + b.len * (b.pitch * u - b.droop * u * u), Math.sin(b.az) * (r0 + b.len * u));
+
+// Spray cards: `cards` = [{ m, d, h, w, roll, fold, aoA, aoB, color }] -> one non-indexed geometry (aPart 2).
+function sprayCards(cards, cell) {
+  const n = cards.length, folded = cards.some(c => c.fold), tv = folded ? 12 : 6;
+  const pos = new Float32Array(n * tv * 3), nor = new Float32Array(n * tv * 3), uv = new Float32Array(n * tv * 2), col = new Float32Array(n * tv * 3);
+  const u0 = (cell % 2) * 0.5, v0 = Math.floor(cell / 2) * 0.5, e = 0.01;
+  const side = new THREE.Vector3(), f = new THREE.Vector3(), p = new THREE.Vector3(), q = new THREE.Vector3(), out = new THREE.Vector3(), nn = new THREE.Vector3(), P = new THREE.Vector3();
+  let o = 0;
+  for (const c of cards) {
+    side.crossVectors(UP, c.d); if (side.lengthSq() < 1e-4) side.set(1, 0, 0); side.normalize();
+    f.crossVectors(c.d, side).normalize();
+    const cr = Math.cos(c.roll), sr = Math.sin(c.roll);
+    p.copy(side).multiplyScalar(cr).addScaledVector(f, sr);
+    q.copy(f).multiplyScalar(cr).addScaledVector(side, -sr);
+    out.set(c.m.x, 0, c.m.z); if (out.lengthSq() < 1e-6) out.set(1, 0, 0);
+    out.normalize().multiplyScalar(0.9).add(new THREE.Vector3(0, 0.45, 0)).normalize();
+    nn.copy(q).multiplyScalar(0.35).addScaledVector(out, 0.65).normalize();
+    const b = Math.cos(c.fold || 0) * c.w / 2, y = Math.sin(c.fold || 0) * c.w / 2;
+    const vert = (end, r) => {
+      P.copy(c.m).addScaledVector(c.d, (end - 0.5) * c.h).addScaledVector(p, r * b).addScaledVector(q, r === 0 ? 0 : -y);
+      pos[o * 3] = P.x; pos[o * 3 + 1] = P.y; pos[o * 3 + 2] = P.z;
+      nor[o * 3] = nn.x; nor[o * 3 + 1] = nn.y; nor[o * 3 + 2] = nn.z;
+      uv[o * 2] = u0 + e + end * (0.5 - 2 * e); uv[o * 2 + 1] = v0 + e + (r + 1) / 2 * (0.5 - 2 * e);
+      const k = (end ? c.aoB : c.aoA) * (r === 0 ? 1 : 0.92);
+      col[o * 3] = c.color.r * k; col[o * 3 + 1] = c.color.g * k; col[o * 3 + 2] = c.color.b * k;
+      o++;
+    };
+    const quad = (ra, rb) => { vert(0, ra); vert(1, ra); vert(0, rb); vert(0, rb); vert(1, ra); vert(1, rb); };
+    if (folded) { quad(-1, 0); quad(0, 1); } else quad(-1, 1);
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+  g.setAttribute('aUv', new THREE.BufferAttribute(uv, 2));
+  g.setAttribute('aCol', new THREE.BufferAttribute(col, 3));
+  g.setAttribute('aPart', new THREE.BufferAttribute(new Float32Array(n * tv).fill(2), 1));
+  return g;
+}
+
+function conifer({ H, crownBase, crownR, trunkR, seed, color, alt, bark = '#5b4c40', ...shape }) {
+  const W = whorls({ H, crownBase, crownR, seed, ...shape }), cA = C(color), cB = C(alt);
+  const ao = (w, u) => 0.35 + 0.65 * u ** 0.7 * (0.55 + 0.45 * w.t);
+  const tint = (w, b) => (w.br.indexOf(b) % 2 ? cB : cA).clone().multiplyScalar(b.tone);
+  const a = new THREE.Vector3(), z = new THREE.Vector3();
+  function cards(lod) {
+    const list = [], segs = lod === 0 ? 2 : 1;
+    W.forEach((w, wi) => {
+      if (lod === 1 && wi % 2) return;
+      for (const b of w.br) {
+        const r0 = trunkR * (1 - w.y / H) * 0.8;
+        for (let s = 0; s < segs; s++) {
+          const ua = 0.1 + (s / segs) * 0.9, ub = 0.1 + ((s + 1) / segs) * 0.9, um = (ua + ub) / 2;
+          branchAt(w, b, ua, r0, a); branchAt(w, b, ub, r0, z);
+          const h = a.distanceTo(z) * (lod === 0 ? 1.4 : 1.25);
+          const wid = Math.min(h * 0.95, b.len * 0.62 * (1.1 - um * 0.45)) * (lod === 0 ? 1.1 : 1.55);
+          list.push({ m: a.clone().add(z).multiplyScalar(0.5), d: z.clone().sub(a).normalize(), h, w: wid, roll: b.roll, fold: lod === 0 ? 0.42 : 0, aoA: ao(w, ua), aoB: ao(w, ub), color: tint(w, b) });
+        }
+      }
+    });
+    for (let i = 0; i < 2; i++) {                                  // leader
+      const ang = i * Math.PI / 2;
+      list.push({ m: new THREE.Vector3(0, H - 0.9, 0), d: new THREE.Vector3(Math.cos(ang) * 0.05, 1, Math.sin(ang) * 0.05).normalize(), h: 2.2, w: 0.9, roll: ang, fold: lod === 0 ? 0.1 : 0, aoA: 0.8, aoB: 1, color: cA });
+    }
+    return sprayCards(list, CELL.needle);
+  }
+  const coreH = H - crownBase;
   return {
     near: () => merge([
-      trunk({ h: trunkH, r0: trunkR, r1: trunkR * 0.55, segs: 7, color: '#6f4a36' }),
-      ...all.map(t => cone({ y: t.y, r: t.r, h: t.h, seed: t.i, color: t.color, dark: 0.7 })),
-      ...(needle ? all.map(t => leafCards({ y: t.y + t.h * 0.3, r: t.r * 0.85, sy: 0.42, n: clampN(t.r * t.r * 0.8, 5, 16), size: t.r * 1.0, cell: CELL.needle, color: t.color, seed: t.i + 40 })) : []),
+      trunk({ h: H * 0.92, r0: trunkR, r1: trunkR * 0.12, segs: 7, hseg: 3, color: bark }),
+      cone({ y: crownBase, r: crownR * 0.5, h: coreH, segs: 7, rough: 0.12, seed, color: alt, dark: 0.42 }),
+      cards(0),
     ]),
     mid: () => merge([
-      trunk({ h: trunkH * 0.8, r0: trunkR, r1: trunkR * 0.55, segs: 5, hseg: 1, color: '#6f4a36' }),
-      cone({ y: y0, r: tiers[0].r * 1.05, h, segs: 7, color, dark: 0.8 }),
-      leafCards({ y: y0 + h * 0.4, r: tiers[0].r * 0.8, sy: h / tiers[0].r * 0.4, n: 12, size: tiers[0].r * 0.9, cell: CELL.needle, color, seed: 3 }),
+      trunk({ h: crownBase + 1, r0: trunkR, r1: trunkR * 0.6, segs: 5, hseg: 1, color: bark }),
+      cone({ y: crownBase, r: crownR * 0.62, h: coreH, segs: 6, rough: 0.1, seed, color: alt, dark: 0.5 }),
+      cards(1),
     ]),
-    far: () => cone({ y: y0, r: tiers[0].r * 1.05, h, segs: 6, rough: 0.1, color, dark: 0.9 }),
+    far: () => merge([
+      trunk({ h: crownBase + 1, r0: trunkR, r1: trunkR * 0.6, segs: 3, hseg: 1, color: bark }),
+      cone({ y: crownBase - 0.5, r: crownR * 0.95, h: coreH + 0.5, segs: 6, rough: 0.12, color, dark: 0.72 }),
+    ]),
   };
 }
 
@@ -297,18 +409,18 @@ const SPECIES = [
     clusters: [{ y: 9.2, r: 4.6, sy: 0.55, color: '#3f6d36' },
                ...ring(6, (i, a) => ({ x: Math.cos(a) * 5.4, y: 7.6 + R11() * 1.2, z: Math.sin(a) * 5.4, r: 3.6 + R11(), sy: 0.55, color: i % 3 ? '#3b6834' : '#46763a' }))],
   }) },
-  { key: 'camphor', name: '樟樹', size: [0.85, 1.2], ...leafy({
-    trunks: () => [trunk({ h: 7, r0: 0.5, r1: 0.32, lean: [0.08, 0.05], color: '#5f5244' }),
-                   ...ring(3, (i, a) => trunk({ h: 4, r0: 0.18, r1: 0.1, segs: 4, hseg: 1, y0: 5.4, lean: [Math.cos(a) * 0.6, Math.sin(a) * 0.6], color: '#5f5244' }))],
-    midTrunk: () => trunk({ h: 7, segs: 5, hseg: 1 }),
-    clusters: [{ y: 11.5, r: 3.8, sy: 0.85, color: '#6f9a3e' },
-               ...ring(5, (i, a) => ({ x: Math.cos(a) * 3.1, y: 9.3 + R12() * 1.5, z: Math.sin(a) * 3.1, r: 3.0 + R12() * 0.8, sy: 0.8, color: i % 2 ? '#6a9540' : '#78a346' }))],
+  { key: 'camphor', name: '樟樹', size: [0.85, 1.2], ...leafy({ skirt: 0.85,
+    trunks: () => [trunk({ h: 5.5, r0: 0.5, r1: 0.32, lean: [0.08, 0.05], color: '#6b5e4f' }),
+                   ...ring(3, (i, a) => trunk({ h: 4, r0: 0.18, r1: 0.1, segs: 4, hseg: 1, y0: 4.0, lean: [Math.cos(a) * 0.6, Math.sin(a) * 0.6], color: '#6b5e4f' }))],
+    midTrunk: () => trunk({ h: 5.5, segs: 5, hseg: 1, color: '#6b5e4f' }),
+    clusters: [{ y: 9.8, r: 3.8, sy: 0.85, color: '#6f9a3e' },
+               ...ring(5, (i, a) => ({ x: Math.cos(a) * 3.1, y: 7.6 + R12() * 1.5, z: Math.sin(a) * 3.1, r: 3.0 + R12() * 0.8, sy: 0.8, color: i % 2 ? '#6a9540' : '#78a346' }))],
   }) },
-  { key: 'broadleaf', name: '常綠闊葉樹（楠、殼斗科）', size: [0.8, 1.25], ...leafy({
-    trunks: () => [trunk({ h: 8, r0: 0.45, r1: 0.28, lean: [-0.06, 0.04], color: '#5a4d40' })],
-    midTrunk: () => trunk({ h: 8, segs: 5, hseg: 1 }),
-    clusters: [{ y: 12.6, r: 3.0, sy: 0.9, color: '#4d7a3a' },
-               ...ring(7, (i, a) => ({ x: Math.cos(a) * (2.4 + R13() * 1.2), y: 9.5 + R13() * 3, z: Math.sin(a) * (2.4 + R13() * 1.2), r: 2.1 + R13() * 0.9, sy: 0.85, color: ['#4d7a3a', '#3f6c35', '#5b8840'][i % 3] }))],
+  { key: 'broadleaf', name: '常綠闊葉樹（楠、殼斗科）', size: [0.8, 1.25], ...leafy({ skirt: 0.9,
+    trunks: () => [trunk({ h: 6, r0: 0.45, r1: 0.28, lean: [-0.06, 0.04], color: '#6a5f52' })],
+    midTrunk: () => trunk({ h: 6, segs: 5, hseg: 1, color: '#6a5f52' }),
+    clusters: [{ y: 11.4, r: 3.0, sy: 0.9, color: '#4d7a3a' },
+               ...ring(7, (i, a) => ({ x: Math.cos(a) * (2.4 + R13() * 1.2), y: 7.8 + R13() * 3.4, z: Math.sin(a) * (2.4 + R13() * 1.2), r: 2.1 + R13() * 0.9, sy: 0.85, color: ['#4d7a3a', '#3f6c35', '#5b8840'][i % 3] }))],
   }) },
   { key: 'acacia', name: '相思樹', size: [0.8, 1.15], ...leafy({
     cell: CELL.acacia, density: 1.3,
@@ -339,21 +451,34 @@ const SPECIES = [
     ]),
     mid: () => merge([trunk({ h: 16, r0: 0.42, r1: 0.3, segs: 5, hseg: 1, color: '#b9b4a8' }), ...ring(6, (i, a) => frond({ base: [0, 16.4, 0], ang: a, len: 4.4, width: 0.8, segs: 2, droop: 1.6, color: '#6b9443' }))]),
     far: () => merge([trunk({ h: 16, r0: 0.4, r1: 0.3, segs: 3, hseg: 1, color: '#b9b4a8' }), clump({ y: 16.2, r: 3.6, sy: 0.4, detail: 0, color: '#6b9443', dark: 0.85 })]) },
-  { key: 'goldenrain', name: '台灣欒樹', size: [0.85, 1.15], ...leafy({
-    trunks: () => [trunk({ h: 6.5, r0: 0.4, r1: 0.26, color: '#5d5146' })],
-    midTrunk: () => trunk({ h: 6.5, segs: 5, hseg: 1 }),
-    clusters: [{ y: 11, r: 3, sy: 0.8, color: '#5f8a3c' },
-               ...ring(6, (i, a) => ({ x: Math.cos(a) * 2.8, y: 9 + R16() * 1.6, z: Math.sin(a) * 2.8, r: 2.7 + R16() * 0.6, sy: 0.8, color: ['#5f8a3c', '#c7a53a', '#5f8a3c', '#b8795a', '#6a933f', '#c7a53a'][i] }))],
+  { key: 'goldenrain', name: '台灣欒樹', size: [0.85, 1.15], ...leafy({ skirt: 0.8,
+    trunks: () => [trunk({ h: 5.5, r0: 0.4, r1: 0.26, color: '#6a5e52' })],
+    midTrunk: () => trunk({ h: 5.5, segs: 5, hseg: 1, color: '#6a5e52' }),
+    clusters: [{ y: 10, r: 3, sy: 0.8, color: '#5f8a3c' },
+               ...ring(6, (i, a) => ({ x: Math.cos(a) * 2.8, y: 8 + R16() * 1.6, z: Math.sin(a) * 2.8, r: 2.7 + R16() * 0.6, sy: 0.8, color: ['#5f8a3c', '#c7a53a', '#5f8a3c', '#b8795a', '#6a933f', '#c7a53a'][i] }))],
   }) },
+  // Understorey of dense forest (shrubs, saplings, ferns): not a tree of the fraction, it fills the floor between
+  // trunks so a closed forest reads as one mass. Near and mid only.
+  { key: 'understorey', name: '林下灌木', size: [0.9, 1.4], under: true,
+    near: () => merge(ring(3, (i, a) => [
+      clump({ x: Math.cos(a) * 1.8, y: 1.6 + 0.7 * i, z: Math.sin(a) * 1.8, r: 2.0 + 0.3 * i, sy: 0.75, detail: 0, rough: 0.5, dark: 0.62, seed: 60 + i, color: '#3a5e2e' }),
+      leafCards({ x: Math.cos(a) * 1.8, y: 1.7 + 0.7 * i, z: Math.sin(a) * 1.8, r: 2.0 + 0.3 * i, sy: 0.75, n: 9, size: 2.1, cell: CELL.broad, seed: 70 + i, color: '#41672f' }),
+    ]).flat()),
+    mid: () => merge([clump({ x: 0.6, y: 2.0, r: 3.0, sy: 0.7, detail: 0, rough: 0.5, dark: 0.6, seed: 63, color: '#3a5e2e' }),
+                      clump({ x: -1.2, y: 1.6, z: 1.0, r: 2.3, sy: 0.7, detail: 0, rough: 0.5, dark: 0.55, seed: 64, color: '#355a2c' })]),
+    far: () => clump({ y: 1.2, r: 2.6, sy: 0.5, detail: 0, color: '#3a5e2e', dark: 0.6 }) },
+  // Chamaecyparis: tall, broad irregular crown of flat, drooping sprays
   { key: 'cypress', name: '紅檜／扁柏', size: [0.85, 1.25], ...conifer({
-    trunkH: 14, trunkR: 0.9, color: '#35644a', alt: '#2f5a3e',
-    tiers: [0, 1, 2, 3, 4].map(i => ({ i, y: 9 + i * 3.6, r: 5.2 - i * 0.85, h: 6.2 - i * 0.5 })) }) },
+    H: 28, crownBase: 9, crownR: 5.6, trunkR: 0.95, seed: 31, color: '#3d6c48', alt: '#2f5a3e', bark: '#6a5243',
+    profile: 0.7, round: 0.6, pitch: [0.0, 0.35], droop: [0.55, 0.2], spacing: 1.45 }) },
+  // Tsuga: layered, horizontal branches with drooping tips, a broad flattish top
   { key: 'hemlock', name: '鐵杉', size: [0.85, 1.2], ...conifer({
-    trunkH: 12, trunkR: 0.7, color: '#2e5238', alt: '#335a3d',
-    tiers: [0, 1, 2, 3, 4].map(i => ({ i, y: 8 + i * 3, r: 4.6 - i * 0.65, h: 3.6 })) }) },
+    H: 24, crownBase: 7, crownR: 4.9, trunkR: 0.72, seed: 37, color: '#355c3c', alt: '#2c5034', bark: '#55483e',
+    profile: 0.55, round: 0.8, pitch: [-0.05, 0.2], droop: [0.7, 0.3], spacing: 1.4 }) },
+  // Abies kawakamii: a narrow, dense spire, branches angled up
   { key: 'fir', name: '冷杉', size: [0.85, 1.15], ...conifer({
-    trunkH: 8, trunkR: 0.5, color: '#25452f', alt: '#2a4c33',
-    tiers: [0, 1, 2, 3, 4, 5].map(i => ({ i, y: 4 + i * 2.6, r: 3.2 - i * 0.45, h: 4.2 })) }) },
+    H: 20, crownBase: 3.5, crownR: 3.3, trunkR: 0.5, seed: 41, color: '#2b4d35', alt: '#24432e', bark: '#4f4640',
+    profile: 1.0, pitch: [0.12, 0.5], droop: [0.28, 0.1], spacing: 1.15 }) },
 ];
 
 // Species mix by elevation (Su 1984 zones) and context. urban: the pixel never gets much canopy (street/park trees).
@@ -429,8 +554,11 @@ function makeMaterial(uniforms, leafTex) {
         if (vPart > 1.5) normal = normalize(vNormal);`)
       .replace('#include <opaque_fragment>', `
         // light through leaves when looking toward the sun
-        float trans = pow(max(dot(-normalize(vViewPosition), uSunView), 0.0), 5.0) * (0.5 + 0.4 * card) * step(0.5, vPart);
+        float aoL = clamp(dot(vTreeCol, vec3(0.3, 0.59, 0.11)) * 3.2, 0.0, 1.0);
+        float trans = pow(max(dot(-normalize(vViewPosition), uSunView), 0.0), 5.0) * (0.35 + 0.9 * card) * aoL * aoL * step(0.5, vPart);
         outgoingLight += diffuseColor.rgb * trans * vec3(1.0, 0.93, 0.62);
+        // sky and bounce light through the canopy: crown undersides and trunks in shade are dim, not black
+        outgoingLight += diffuseColor.rgb * mix(0.03, 0.2, uDay) * mix(0.6, 1.0, step(0.5, vPart));
         #include <opaque_fragment>`);
   };
   return m;
@@ -484,21 +612,40 @@ export class Forest {
     for (const [name, size] of INST_ATTRS) g.setAttribute(name, new THREE.InstancedBufferAttribute(new Float32Array(cap * size), size));
     const mesh = new THREE.InstancedMesh(g, b.mat, cap);
     Object.assign(mesh, { customDepthMaterial: b.depth, castShadow: b.lod !== 'far', receiveShadow: b.lod === 'near', frustumCulled: false, visible: this._visible });
+    // casters come first: the shadow pass draws only them (trees inside the shadow box), the view draws all
+    mesh.onBeforeShadow = () => { mesh.count = b.nCast; };
+    mesh.onAfterShadow = () => { mesh.count = b.n; };
     this.scene.add(mesh);
     Object.assign(b, { mesh, cap, refs: new Int32Array(cap * 2) });
   }
 
   // Rebuild instances for pixels within `radius` of `focus` that lie inside the view cone (horizontal half-angle
-  // `half` around `camDir`; everything near the focus is kept regardless); detail level by distance to the camera.
-  build(ds, frame, focus, radius, years, camPos, camDir = null, half = Math.PI, nearDist = NEAR_DIST) {
-    // scratch output per bucket (typed arrays, grown as needed and reused across builds); buckets indexed by number
+  // `half` around `camDir`; everything near the focus is kept regardless); detail level by distance to the camera,
+  // relative to the tree's size. Near/mid trees within `shadowR` of the focus cast shadows.
+  build(ds, frame, focus, radius, years, camPos, camDir = null, half = Math.PI, nearDist = NEAR_DIST, shadowR = Infinity) {
+    // scratch output per bucket and caster/non-caster (typed arrays, grown as needed and reused across builds)
     if (!this.lists) {
       this.bucketArr = [...this.buckets.values()];
-      this.lists = this.bucketArr.map(() => ({ n: 0, cap: 0, m: null, tint: null, thr: null, refs: null }));
+      this.lists = this.bucketArr.flatMap(() => [0, 1].map(() => ({ n: 0, cap: 0, m: null, tint: null, thr: null, refs: null })));
       this.spIndex = Object.fromEntries(SPECIES.map((sp, i) => [sp.key, i]));
     }
     const lists = this.lists, nL = LODS.length;
     for (const L of lists) L.n = 0;
+    const sh2 = shadowR * shadowR;
+    // one instance: rotation about y, then scale, then translation (column-major); casters into the first list
+    const emit = (si, lod, px, py, pz, cs, sn, sx, sy, sz, rand, thr, ti, k) => {
+      const cast = lod < 2 && (px - focus.x) ** 2 + (pz - focus.z) ** 2 < sh2;
+      const L = lists[(si * nL + lod) * 2 + (cast ? 0 : 1)];
+      const n = push(L), m = L.m, o = n * 16;
+      m[o] = cs * sx; m[o + 1] = 0; m[o + 2] = -sn * sx; m[o + 3] = 0;
+      m[o + 4] = 0; m[o + 5] = sy; m[o + 6] = 0; m[o + 7] = 0;
+      m[o + 8] = sn * sz; m[o + 9] = 0; m[o + 10] = cs * sz; m[o + 11] = 0;
+      m[o + 12] = px; m[o + 13] = py; m[o + 14] = pz; m[o + 15] = 1;
+      const hue = rand(), val = 0.86 + rand() * 0.26;
+      L.tint[n * 3] = val * (0.94 + hue * 0.1); L.tint[n * 3 + 1] = val * (0.97 + hue * 0.06); L.tint[n * 3 + 2] = val * (0.9 + (1 - hue) * 0.12);
+      L.thr[n] = thr;
+      L.refs[n * 2] = ti; L.refs[n * 2 + 1] = k;
+    };
     const push = (L) => {
       if (L.n === L.cap) {
         const cap = Math.max(1024, L.cap * 2), grow = (a, k, T) => { const b = new T(cap * k); if (a) b.set(a); return b; };
@@ -562,39 +709,47 @@ export class Forest {
           const cc = Math.min(P - 1, Math.max(0, col + Math.round(ox / res))), rr = Math.min(P - 1, Math.max(0, row + Math.round(oz / res)));
           const zz = 0.5 * (z + tile.z[rr * P + cc]);
           const px = wx + ox, py = zz * EXAG - 0.4, pz = wz + oz;
-          const ddx = px - camPos.x, ddy = py - camPos.y, ddz = pz - camPos.z, c2 = ddx * ddx + ddy * ddy + ddz * ddz;
-          const lod = c2 < near2 ? 0 : c2 < mid2 ? 1 : 2, si = this.spIndex[sp];
-          const L = lists[si * nL + lod], spec = SPECIES[si];
+          const si = this.spIndex[sp], spec = SPECIES[si];
           const ang = rand() * Math.PI * 2, cs = Math.cos(ang), sn = Math.sin(ang);
           const size = spec.size[0] + rand() * (spec.size[1] - spec.size[0]);
+          const ddx = px - camPos.x, ddy = py - camPos.y, ddz = pz - camPos.z, c2 = (ddx * ddx + ddy * ddy + ddz * ddz) / (size * size);
+          const lod = c2 < near2 ? 0 : c2 < mid2 ? 1 : 2;
           // widen crowns where the canopy is dense (street trees in sparse pixels stay slimmer)
           const wide = size * (1 + (CLOSURE - 1) * smooth(30, 80, maxF));
-          const sx = wide * (0.9 + rand() * 0.2), sy = size * (0.88 + rand() * 0.24), sz = wide * (0.9 + rand() * 0.2);
-          const n = push(L), m = L.m, o = n * 16;              // rotation about y, then scale, then translation (column-major)
-          m[o] = cs * sx; m[o + 1] = 0; m[o + 2] = -sn * sx; m[o + 3] = 0;
-          m[o + 4] = 0; m[o + 5] = sy; m[o + 6] = 0; m[o + 7] = 0;
-          m[o + 8] = sn * sz; m[o + 9] = 0; m[o + 10] = cs * sz; m[o + 11] = 0;
-          m[o + 12] = px; m[o + 13] = py; m[o + 14] = pz; m[o + 15] = 1;
-          const hue = rand(), val = 0.86 + rand() * 0.26;
-          L.tint[n * 3] = val * (0.94 + hue * 0.1); L.tint[n * 3 + 1] = val * (0.97 + hue * 0.06); L.tint[n * 3 + 2] = val * (0.9 + (1 - hue) * 0.12);
-          L.thr[n] = thr;
-          L.refs[n * 2] = ti; L.refs[n * 2 + 1] = k;
+          const tall = size * (1 + (CLOSURE - 1) * 0.45 * smooth(30, 80, maxF));
+          emit(si, lod, px, py, pz, cs, sn, wide * (0.9 + rand() * 0.2), tall * (0.84 + rand() * 0.32), wide * (0.9 + rand() * 0.2), rand, thr, ti, k);
+        }
+        // understorey in dense, non-urban forest: one clump per pixel, appears with the canopy
+        if (maxF >= 55 && z < 3000) {
+          const ru = rng((X * 83492791) ^ (Y * 2654435761) ^ 0x5bd1e995), th = 0.5 + ru() * 0.25;
+          const ox = (ru() - 0.5) * res * 0.8, oz = (ru() - 0.5) * res * 0.8, px = wx + ox, pz = wz + oz;
+          const sz = 0.9 + ru() * 0.5, ddx = px - camPos.x, ddz = pz - camPos.z, ddy = z * EXAG - camPos.y;
+          const c2 = (ddx * ddx + ddy * ddy + ddz * ddz) / (sz * sz);
+          if (c2 < mid2) {
+            const ang = ru() * Math.PI * 2;
+            emit(this.spIndex.understorey, c2 < near2 ? 0 : 1, px, z * EXAG - 0.3, pz, Math.cos(ang), Math.sin(ang), sz * 1.3, sz * (0.8 + ru() * 0.5), sz * 1.3, ru, th, ti, k);
+          }
         }
       }
     });
     this.bucketArr.forEach((b, i) => {
-      const L = lists[i], n = L.n;
-      b.n = n;
+      const A = lists[i * 2], B = lists[i * 2 + 1], n = A.n + B.n;
+      b.n = n; b.nCast = A.n;
       if (!n && !b.mesh) return;
       this.ensure(b, n);
       b.mesh.count = n;
       if (!n) return;
-      b.mesh.instanceMatrix.array.set(L.m.subarray(0, n * 16));
-      b.mesh.instanceMatrix.needsUpdate = true;
       const g = b.mesh.geometry.attributes;
-      g.aTint.array.set(L.tint.subarray(0, n * 3)); g.aThr.array.set(L.thr.subarray(0, n));
+      let o = 0;
+      for (const L of [A, B]) {
+        if (!L.n) continue;
+        b.mesh.instanceMatrix.array.set(L.m.subarray(0, L.n * 16), o * 16);
+        g.aTint.array.set(L.tint.subarray(0, L.n * 3), o * 3); g.aThr.array.set(L.thr.subarray(0, L.n), o);
+        b.refs.set(L.refs.subarray(0, L.n * 2), o * 2);
+        o += L.n;
+      }
+      b.mesh.instanceMatrix.needsUpdate = true;
       g.aTint.needsUpdate = g.aThr.needsUpdate = true;
-      b.refs.set(L.refs.subarray(0, n * 2));
     });
   }
 

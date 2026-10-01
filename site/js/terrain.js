@@ -7,6 +7,7 @@ import { CLOUD_GLSL, WATER_GLSL } from './weather.js';
 
 export const EXAG = 1.5;                 // vertical exaggeration (display only)
 export const DISPLAY_ZONE = 51;          // common display frame; zone-50 tiles are reprojected for display only
+const CANOPY_H = 13;                     // display height of closed canopy on the terrain beyond the instanced trees (m)
 
 // Carry-forward fill for display: a pixel with no clear observation in a year shows its last observed value
 // and is flagged, so gaps render greyed-out instead of looking like loss. Stored data is untouched.
@@ -42,7 +43,7 @@ export function worldToDisplayUtm(frame, wx, wz) { return [wx + frame.ox, frame.
 
 const vertexDecl = /* glsl */`
 attribute float aFa; attribute float aFb; attribute float aNa; attribute float aNb; attribute float aOwn; attribute float aLand; attribute float aBuilt; attribute float aBs;
-uniform float uT; varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld; varying vec3 vNw;
+uniform float uT; uniform vec3 uTreeFocus; uniform float uTreeR; varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld; varying vec3 vNw;
 varying float vBuilt; varying float vBs;`;
 const fragDecl = /* glsl */`
 varying float vF; varying float vNd; varying float vOwn; varying float vLand; varying float vH; varying vec3 vWorld; varying vec3 vNw;
@@ -85,7 +86,9 @@ vec3 canopy(vec3 c, float f, vec2 xz) {
   vec2 cp = xz / 8.5;
   float fw = length(fwidth(cp));
   float wFar = smoothstep(0.7, 1.3, fw), wNear = 1.0 - smoothstep(0.05, 0.11, fw);
-  vec3 under = c * (0.62 + 0.3 * tvn(xz / 2.2) + 0.18 * tvn(xz / 7.0)) * mix(vec3(1.0), vec3(0.92, 1.02, 0.95), 0.5);
+  // forest floor under a closed canopy is dark leaf litter and understorey, not the open-ground colour
+  vec3 litter = mix(vec3(0.13, 0.15, 0.08), vec3(0.17, 0.14, 0.09), tvn(xz / 9.0));
+  vec3 under = mix(c, litter, 0.8 * smoothstep(0.25, 0.85, f)) * (0.62 + 0.3 * tvn(xz / 2.2) + 0.18 * tvn(xz / 7.0)) * mix(vec3(1.0), vec3(0.92, 1.02, 0.95), 0.5);
   vec3 crownsC = c;
   if (wFar < 1.0 && wNear < 1.0) {
     vec4 cc = crownCell(cp);
@@ -108,7 +111,7 @@ export const shareUniforms = (sh, uniforms, names = WEATHER_UNIFORMS) => { for (
 export function makeTerrainMaterial(uniforms) {
   const m = new THREE.MeshLambertMaterial({ color: 0xffffff });
   m.onBeforeCompile = (sh) => {
-    sh.uniforms.uT = uniforms.uT;
+    sh.uniforms.uT = uniforms.uT; sh.uniforms.uTreeFocus = uniforms.uTreeFocus; sh.uniforms.uTreeR = uniforms.uTreeR;
     shareUniforms(sh, uniforms);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', `#include <common>\n${vertexDecl}`)
@@ -116,7 +119,11 @@ export function makeTerrainMaterial(uniforms) {
         vF = mix(aFa, aFb, uT) / 100.0;
         vNd = mix(aNa, aNb, uT);
         vOwn = aOwn; vLand = aLand; vH = position.y; vNw = objectNormal; vBuilt = aBuilt; vBs = aBs;
-        vWorld = (modelMatrix * vec4(position, 1.0)).xyz;`);
+        // beyond the instanced trees the canopy is part of the surface: forest stands ~${CANOPY_H} m above the ground,
+        // so ridgelines and forest edges keep their volume and the hand-over from trees to terrain is level
+        float dTree = length((modelMatrix * vec4(position, 1.0)).xz - uTreeFocus.xz);
+        transformed.y += ${CANOPY_H.toFixed(1)} * smoothstep(0.3, 0.85, vF) * step(0.5, aLand) * smoothstep(uTreeR * 0.95, uTreeR * 1.08 + 150.0, dTree);
+        vWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`);
     sh.fragmentShader = sh.fragmentShader
       .replace('#include <common>', `#include <common>\n${fragDecl}`)
       .replace('vec4 diffuseColor = vec4( diffuse, opacity );', `

@@ -198,6 +198,25 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   ~18 ms; `?trees=1` fixes it (tests). Measured on an M2 Pro at 1280×577: 60 fps at the 1.7 km start view (~70k trees,
   ~2M triangles), ~47 fps with the camera in the canopy at 350 m; rebuilds 30–70 ms for up to 120k trees (per-tile
   cached max cover, row/column window, typed-array output). Alpha-to-coverage was dropped: it left white specks at night.
+- **Forest realism (2026-10-01, ideas from boring-forest.vercel.app):**
+  - Conifers (cypress, hemlock, fir) are grown as whorls of branches. Each branch carries needle-spray cards along it:
+    near = 2 cards per branch, folded along the stem so they never vanish edge-on; mid = every 2nd whorl, 1 flat card.
+    The needle atlas cell is a single branch spray along u. A dark core cone fills the gaps; far = a cone.
+  - Broadleaf crowns are deeper and sit lower: `CLOSURE` widening also raises crown height (×1.225 at full cover), and
+    camphor, evergreen broadleaf and golden-rain have a card-only "skirt" ring of lower clusters.
+  - An `understorey` pseudo-species (one shrub/sapling clump per pixel with max cover ≥ 55 %, z < 3,000 m, near/mid only,
+    appears at fraction 0.5–0.75) hides bare trunks and bright ground.
+  - Foliage and trunks get a small ambient floor light (crown undersides were black). Translucency is weighted by the
+    baked AO.
+  - The LOD distance is divided by tree size. Shadow casters (near/mid within 1.35 × the shadow half-size of the focus)
+    come first in each instance buffer, and `onBeforeShadow` draws only those.
+  - Terrain:
+    - Under dense canopy, the near-scale floor shades toward dark leaf litter.
+    - Beyond the instanced-tree radius (`uTreeFocus`/`uTreeR`), land vertices are lifted by 13 m × the closed-canopy
+      share (display only; picking still uses the DEM).
+  - The grade split-tones the image: cool shade, warm light.
+  - Measured on an M2 Pro (1280×720): 23 ms at the 1.7 km test view (unchanged, because trees are not the bottleneck
+    there: hiding them all saves < 1 ms); rebuilds 25–70 ms.
 - **Camera (2026-09-29):** MapControls: left-drag pans; right-drag, Shift/Ctrl/⌘+drag or a two-finger twist rotates. A
   control column (row on phones) adds rotate ±26°, tilt ±10°, and a compass that shows north and resets to north-up;
   keys Q/E rotate, R/F tilt, N north. Pending turns are eased and capped, so a held key keeps a steady pace.

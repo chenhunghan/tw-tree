@@ -53,7 +53,8 @@ sun.shadow.bias = -0.0004;
 sun.shadow.normalBias = 0.8;
 scene.add(sun, sun.target);
 const weather = new Weather(scene);
-const uniforms = { uT: { value: 0 }, uTime: { value: 0 }, uSunView: { value: new THREE.Vector3() }, uYearF: { value: 1984 }, ...weather.uniforms };
+const uniforms = { uT: { value: 0 }, uTime: { value: 0 }, uSunView: { value: new THREE.Vector3() }, uYearF: { value: 1984 },
+  uTreeFocus: { value: new THREE.Vector3() }, uTreeR: { value: 0 }, ...weather.uniforms };
 const sea = new THREE.Mesh(new THREE.PlaneGeometry(4000000, 4000000), makeWaterMaterial(uniforms));
 sea.rotation.x = -Math.PI / 2; sea.position.y = -1.5; sea.receiveShadow = true;
 scene.add(sea);
@@ -72,6 +73,7 @@ const grade = new ShaderPass({
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
   fragmentShader: `uniform sampler2D tDiffuse; uniform float uSat, uContrast, uVig; varying vec2 vUv;
     void main(){ vec4 c = texture2D(tDiffuse, vUv); float l = dot(c.rgb, vec3(0.2126, 0.7152, 0.0722));
+      c.rgb *= mix(vec3(0.95, 1.0, 1.05), vec3(1.05, 1.0, 0.93), smoothstep(0.02, 0.5, l));   // cool shade, warm sunlight
       c.rgb = mix(vec3(l), c.rgb, uSat); c.rgb = (c.rgb - 0.18) * uContrast + 0.18;
       float d = distance(vUv, vec2(0.5)); c.rgb *= 1.0 - uVig * smoothstep(0.35, 0.85, d);
       gl_FragColor = c; }`,
@@ -478,7 +480,7 @@ controls.addEventListener('change', () => { if (userDragging || fly) lastMove = 
 function updateTrees() {
   if (!years.length) return;
   const dist = camera.position.distanceTo(controls.target);
-  if (dist > 14000) { forest.visible = false; city.visible = false; return; }
+  if (dist > 14000) { forest.visible = false; city.visible = false; uniforms.uTreeR.value = 0; return; }
   forest.visible = true; city.visible = true;
   const radius = THREE.MathUtils.clamp(dist * 1.6, 1000, 3600) * treeQ;
   const dir = camera.getWorldDirection(new THREE.Vector3()), heading = Math.atan2(dir.x, dir.z);
@@ -490,16 +492,18 @@ function updateTrees() {
     // horizontal half-angle of the view plus a margin, so a small turn doesn't show the edge; top-down views keep all
     const hfov = Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) * camera.aspect);
     const steep = -dir.y > 0.8;
-    forest.build(ds, frame, lastFocus, radius, years, lastCam, dir, steep ? Math.PI : hfov + 0.55, NEAR_DIST * Math.min(1, treeQ * treeQ));
+    forest.build(ds, frame, lastFocus, radius, years, lastCam, dir, steep ? Math.PI : hfov + 0.55, NEAR_DIST * Math.min(1, treeQ * treeQ), shadowHalf(dist) * 1.35);
+    uniforms.uTreeFocus.value.copy(lastFocus); uniforms.uTreeR.value = radius;
     city.build(ds, frame, lastFocus, THREE.MathUtils.clamp(dist * 0.75, 700, 2400) * 1.3);
     const k = Math.min(Math.floor(yearPos), years.length - 2);
     forest.setYears(years[k], years[k + 1]);
   }
 }
 
+const shadowHalf = (dist) => THREE.MathUtils.clamp(dist * 0.8, 400, 1800);   // half-size of the sun's shadow box (m)
 function updateSun() {
   const dist = camera.position.distanceTo(controls.target);
-  const S = THREE.MathUtils.clamp(dist * 0.8, 400, 1800);
+  const S = shadowHalf(dist);
   sun.target.position.copy(controls.target);
   sun.position.copy(controls.target).addScaledVector(weather.lightDir, 6000);
   sun.castShadow = dist < 14000;
