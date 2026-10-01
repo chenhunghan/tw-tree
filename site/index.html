@@ -287,6 +287,7 @@
       <li><b>建築物是示意：</b>某像元在 GISA 資料中第一次成為不透水面（建成）的那一年，建築才會長出來；數量依 GHSL 2018 的建成面積比例，高度依 GHSL 2018 的建物高度，位置與形狀是程式產生的，不是真實建物輪廓。GISA 只記錄「第一次建成」，所以拆除、改建或都市綠化不會顯示；2021 年以後新建的也還沒有。夜間燈光同樣只是示意。</li>
       <li>地址搜尋使用 OpenStreetMap 的 Nominatim；臺灣門牌資料不完整，找不到時會逐步退到巷弄、路段或行政區，並顯示達到的精度。</li>
       <li><b>廠區故事</b>（含 <code>?story=</code> 的連結）是把同一套樹冠比例，平均到 OpenStreetMap 的廠區範圍與其周邊環帶；文中的興建日期來自所列的新聞與公司資料。廠房是 OpenStreetMap 的實際建物輪廓（不是示意），高度多為估計，出現的年份依 GISA 第一次建成的年份，或廠區樹冠消失的年份推估；半透明的是 OpenStreetMap 標示為興建中的建物。開啟故事時，廠區內不畫示意建築。</li>
+      <li><b>營收估計與獨角獸</b>：台積電只公布全公司營收，不公布各廠營收。故事中的廠區營收是估計：每月公布的營收，依當季各製程占晶圓營收的比例，再依本廠區在各製程產能中的估計占比拆分（封測廠依先進封裝營收占比與各封測廠的估計占比），以年均匯率換成美元；範圍依各項拆分的把握程度（約 ±10–45%）。2015 年後台積電不再公布各廠產能，之後的拆分多依新聞與分析師估計。每累積 10 億美元，就有一隻獨角獸從廠房飛出（純屬趣味）。資料與來源：<code>pipeline/analysis/tsmc_revenue_inputs.json</code>。</li>
     </ul>
     <h3>來源</h3>
     <ul>
@@ -324,6 +325,7 @@
       <li><b>Buildings are illustrative:</b> buildings rise in the year a pixel first becomes impervious (built) in the GISA data. Their number follows the GHSL 2018 built-up share and their height the GHSL 2018 building height; positions and shapes are generated, not real footprints. GISA records only first construction, so demolition, rebuilding and urban greening are not shown, and buildings after 2021 are not there yet. Night lights are illustrative too.</li>
       <li>Address search uses OpenStreetMap's Nominatim. House numbers in Taiwan are incomplete, so when one is not found the search falls back to the lane, road section or district and says how precise the result is.</li>
       <li><b>Site stories</b> (links with <code>?story=</code>) average the same tree-cover values over a site outline from OpenStreetMap and over a ring around it; construction dates in the text come from the cited news and company sources. Fab buildings are real OpenStreetMap footprints (not illustrative); heights are mostly estimates, and the year each appears comes from GISA's first-built year or the year the site's tree cover went. Translucent ones are tagged as under construction in OpenStreetMap. While a story is open, no illustrative buildings are drawn inside the site.</li>
+      <li><b>Revenue estimates and unicorns</b>: TSMC reports revenue only for the whole company, not per fab. A story's revenue is an estimate: each month's reported revenue is split by that quarter's share of wafer revenue per process node and by the site's estimated share of each node's capacity (packaging sites: by the advanced-packaging share and each site's estimated part of it), converted to US$ at the year's average rate. The range reflects how certain each split is (about ±10–45 %). TSMC stopped publishing per-fab capacity after 2014, so later splits rely mostly on press and analyst estimates. Every US$1 bn of the estimate sends one unicorn out of the fab (just for fun). Inputs and sources: <code>pipeline/analysis/tsmc_revenue_inputs.json</code>.</li>
     </ul>
     <h3>Sources</h3>
     <ul>

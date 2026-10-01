@@ -279,6 +279,23 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
 - **Clouds and haze (2026-10-01):** seen from above, the cloud layer (2.4 km) thins with height (to 55 % → 12 %) and
   always clears around the focus (radius ~0.9 × camera distance); the fog density falls off from 8 km camera distance
   (was 18 km), so zoomed-out views stay readable.
+- **Revenue and unicorns (2026-10-01):** TSMC reports revenue only company-wide, so `pipeline/analysis/fab_revenue.py`
+  estimates each story site's monthly revenue and adds it to `site/stories/tsmc.json` (`revenue`: years, usd, lo, hi,
+  months [12 × US$ bn per year], through). Run it after `build_stories.py` and `site_buildings.py`.
+  - Method: monthly revenue × wafer share × that quarter's node mix × the site's share of each node (capacity-based);
+    packaging sites (AP6, AP7) get advanced-packaging share × site share. Converted at the year's average NT$/US$ rate.
+    Range: ±10/25/45 % for high/medium/low-confidence fab splits (±50 % packaging), fully correlated.
+  - Inputs, each with a source: `pipeline/analysis/tsmc_revenue_inputs.json` (researched 2026-10-01). Monthly revenue
+    1997-07 to 2026-08 (parent-only before 2006-04), quarterly node mix 2000Q1–2026Q2 (2000Q1/Q3/Q4 are wafer-unit
+    mixes), and `node_fab_share`. Per-fab capacity was published only to 2014, so most later splits are judgement calls.
+  - Fab 14's story includes Fab 6 (its buildings lie inside the outline). The R&D Center and Fab 25 have no revenue.
+    2 nm appears in the node mix only from 2026Q2. 2026 covers Jan–Aug.
+  - Totals: Fab 18 US$207 bn (2020–26), Fab 14+6 192, Fab 15 139, Fab 12 131, AP6 7, AP7 1.1, Fab 20/22 0.9 each.
+  - App: the panel shows monthly bars, the month's estimate and range, and the running total. One procedural unicorn
+    (`js/unicorns.js`: instanced body/legs/wings plus a camera-facing six-band rainbow trail) flies from a standing roof
+    per US$1 bn as the timeline plays forward. Revenue for year Y accrues while Y is shown. Above 80 in the air, the
+    oldest fade early.
+  - Social previews (`render_og.py`, English only): 🌳 before → after vs 🦄 × total, with a flock in the "after" half.
 - **Fab buildings in stories (2026-10-01):** `pipeline/analysis/site_buildings.py` adds each story's OSM building
   footprints (Overpass query in `pipeline/analysis/tsmc_buildings_overpass.txt`) to `site/stories/tsmc.json`: centroid
   inside the outline (+40 m), ≥ 400 m², not residential/religious, named ones only if fab-like (P1, CUP, 廠 …),

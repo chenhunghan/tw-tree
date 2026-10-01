@@ -6,7 +6,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const MAX = 96;                 // unicorns in the air at once (more crossings are still counted)
+const MAX = 128, SOFT = 80;      // unicorns in the air at once (more crossings are still counted); beyond SOFT the oldest fade
+const FADE = 0.6;               // seconds of the fade-out at the end of a flight
 const LIFE = 5.2;               // seconds in the air
 const TRAIL = 1.7, SEG = 28;    // rainbow trail: seconds of flight behind each unicorn, segments along it
 const COAT = '#f7f4fb', HOOF = '#8a7f8e', GOLD = '#f1c453';
@@ -109,6 +110,8 @@ export class Unicorns {
 
   // origin: THREE.Vector3 (a roof); size: world units per unicorn unit (scaled to stay readable from the camera)
   spawn(origin, size) {
+    // a crowded sky (Fab 18 earns ~70 a second at playback speed): the oldest fade out early instead of popping
+    if (this.list.length >= SOFT) for (const u of this.list) if (u.t < LIFE - FADE) { u.t = LIFE - FADE; break; }
     if (this.list.length >= MAX) this.list.shift();
     this.list.push({ o: origin.clone(), size, t: 0, th: Math.random() * Math.PI * 2, turn: (Math.random() < 0.5 ? -1 : 1) * (0.35 + Math.random() * 0.4),
       climb: 0.8 + Math.random() * 0.5, ph: Math.random() * 6.28 });
@@ -157,7 +160,7 @@ export class Unicorns {
       this.#at(u, u.t, pos); this.#at(u, u.t + 0.05, nxt);
       const dx = nxt.x - pos.x, dy = nxt.y - pos.y, dz = nxt.z - pos.z;
       const yaw = Math.atan2(-dz, dx), pitch = Math.min(0.28, Math.atan2(dy, Math.hypot(dx, dz)) * 0.4);   // a gentle climb, galloping on air
-      const grow = Math.min(1, u.t / 0.35) * Math.min(1, (LIFE - u.t) / 0.6), sz = u.size * grow;
+      const grow = Math.min(1, u.t / 0.35) * Math.min(1, (LIFE - u.t) / FADE), sz = u.size * grow;
       const ph = u.ph + u.t * 9, bob = Math.sin(ph * 2) * 0.12 * sz;
       q.setFromEuler(e.set(0, yaw, pitch + Math.sin(ph) * 0.06, 'YXZ'));
       p.compose(v.set(pos.x, pos.y + bob, pos.z), q, s.set(sz || 1e-6, sz || 1e-6, sz || 1e-6));

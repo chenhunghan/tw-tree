@@ -322,7 +322,7 @@ export class Story {
       const whisk = r.hi ? `<line x1="${x}" x2="${x}" y1="${yp(r.hi[i])}" y2="${yp(r.lo[i])}" stroke="#c9a227" stroke-opacity="0.55" vector-effect="non-scaling-stroke"/>` : '';
       return `<rect x="${(x - bw / 2).toFixed(1)}" y="${yp(v).toFixed(1)}" width="${bw.toFixed(1)}" height="${Math.max(0, H - 10 - yp(v)).toFixed(1)}" fill="#e2b93b" rx="0.6"/>` + whisk;
     }).join('')
-      + `<text x="${pad + 1}" y="8" font-size="8" fill="#999">${lang === 'zh' ? `${this.revenueFmt(top)} 億美元` : `US$${this.revenueFmt(top)} bn`}</text>`
+      + `<text x="${pad + 1}" y="8" font-size="8" fill="#999">${r.months ? t('sRevScaleMo', this.revenueFmt(top / 12)) : t('sRevScaleYr', this.revenueFmt(top))}</text>`
       + `<line x1="${pad}" x2="${W - pad}" y1="${H - 10}" y2="${H - 10}" stroke="#ccc" vector-effect="non-scaling-stroke"/>`
       + `<line id="storyRevYear" y1="0" y2="${H - 10}" stroke="#d9480f" stroke-width="1" vector-effect="non-scaling-stroke"/>`
       + `<text x="${pad}" y="${H - 1}" font-size="8" fill="#999">${lo}</text><text x="${W - pad}" y="${H - 1}" font-size="8" fill="#999" text-anchor="end">${hiY}</text>`;
