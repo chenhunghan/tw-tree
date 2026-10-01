@@ -257,11 +257,34 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   each story has a static share page `site/s/<id>/index.html` (its own og:/twitter: title, description and image; it
   forwards at once to `../../?story=<id>` plus any at/d/az/el/from/lang on the link) and a 1200×630 preview
   `site/og/<id>.jpg`: the app's own render (headless, `?ui=0` capture mode hides panels and the pin, `trees=1`, clear
-  10:30, at 0.45 × the story distance) of the year before the clearing (left) and the last year (right), with the name,
-  the measured drop and credits. `site/og/default.jpg` and og tags on `index.html` cover the app. "Share this story"
-  links to `s/<id>/`. Custom views keep the story's standard image (a per-view image would need a server). Regenerate
-  after story changes: `uv run pipeline/og/render_og.py` (needs agent-browser, network, macOS STHeiti fonts;
-  `--pages-only`, `--only id,id`).
+  10:30, `lang=en`, at 1.78 × the story distance) of the year before the clearing (left) and the last year (right, with
+  a flock of 12 unicorns when the site has revenue). `site/og/default.jpg` and og tags on `index.html` cover the app.
+  "Share this story" links to `s/<id>/`. Custom views keep the story's standard image (a per-view image would need a
+  server).
+  - All preview text, titles and descriptions are English only (one language per card). Headline: 🌳 before → after vs
+    🦄 × estimated US$ bn, then "≈ N trees' canopy lost · ≈ M trees per 🦄".
+  - Metadata: og:locale en_US (+ zh_TW alternate), og:image:type/alt, twitter:image:alt, theme-color, an inline SVG 🌳
+    favicon.
+  - A share page's `<link rel="canonical">` is the share page itself (= og:url). It used to point to `?story=…`, and
+    crawlers that follow canonical (LinkedIn) would then read the app page and show the generic card.
+  - Regenerate after story changes: `uv run pipeline/og/render_og.py` (needs agent-browser, network, macOS STHeiti and
+    Apple Color Emoji, which has bitmap strikes only, so emoji are drawn at 160 px and scaled; `--pages-only`,
+    `--only id,id`).
+  - Social sites cache cards: refresh old links in their debuggers (Facebook Sharing Debugger, LinkedIn Post
+    Inspector).
+- **Story data rebuild order:** `build_stories.py` (series, framing; rewrites `tsmc.json`) → `site_buildings.py`
+  (footprints) → `fab_revenue.py` (revenue) → `render_og.py` (cards). Each later step only adds its own keys.
+- **Revenue inputs upkeep:** `tsmc_revenue_inputs.json` was researched by hand by an agent on 2026-10-01. The scripts
+  that built it were not kept, so extend it by hand: append new `monthly_revenue.months` (TSMC IR monthly page, NT$ m)
+  and `node_share_quarterly.quarters`, then rerun `fab_revenue.py`.
+  - Known oddities: the 20-F lists Fab 12's most advanced node as 3 nm for FY2022–23 but 40 nm for FY2024–25.
+    Capacity moved on paper from Fab 5/8 to Fab 6 in 3Q13, so Fab 6 capacity after mid-2013 is uncertain. 2000Q1/Q3/Q4
+    node mixes are wafer units, not revenue.
+- **Testing and caching:** `window.__app.story` exposes the story; `__app.advance(sec)` steps frames and also flies
+  unicorns (`story.tick` takes the frame's dt). To test playback headless: `st.holdUntil = 0;
+  st.app.setYear(i, true); __app.advance(…)`. GitHub Pages lets browsers cache files for about 10 minutes, and ES
+  modules can stay cached after a normal reload, so "no change visible" right after a deploy is usually a stale cache:
+  hard reload, or check the live file with curl.
 - **Terrain seams (2026-10-01):** tile meshes put their outer vertices on the tile boundary (not the edge pixels'
   centres: detailed tiles stopped 15 m and coarse ones 240 m short, so detail-next-to-coarse showed the sea through
   strips up to ~225 m) and hang a skirt (40 m detail, 120 m coarse) from every edge. Coarse tiles draw all cells (no
