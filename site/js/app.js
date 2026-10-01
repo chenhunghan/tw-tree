@@ -154,19 +154,23 @@ async function load() {
   computeStats(index);
   buildTimeline(index);
   buildMinimap();
-  // start close enough to see trees, at a random place where tree cover changed; then autoplay
-  const start = pickStart();
-  if (start) viewAt(start);
+  // a shared link (?at=lat,lon) opens there; otherwise start close enough to see trees, at a random place where
+  // tree cover changed; then autoplay
+  const shared = sharedView();
+  const start = shared ? null : pickStart();
+  if (shared) openShared(shared);
+  else if (start) viewAt(start);
   else {
     const span = Math.max(...index.tiles.map(t => Math.hypot(...toWorld(frame, t.zone, t.x0, t.y0, 0).filter((_, k) => k !== 1))));
     const d = streaming ? span * 1.9 : 20000;
     controls.target.set(0, 0, 0); camera.position.set(-d * 0.17, d * 0.62, d * 0.76);
   }
-  controls.autoRotate = true; controls.autoRotateSpeed = 0.35;
+  controls.autoRotate = !shared; controls.autoRotateSpeed = 0.35;
   $('loading').style.opacity = 0;
   setTimeout(() => $('loading').remove(), 700);
-  setYearPos(0);
-  playing = true; updatePlayButton();
+  const y = shared ? years.indexOf(shared.year) : -1;
+  setYearPos(y >= 0 ? y : 0);
+  playing = y < 0; updatePlayButton();
 }
 
 // A random land pixel with mid-range tree cover that changed over the timeline (full tiles, or the overview when
@@ -664,6 +668,50 @@ $('gps').onclick = () => {
     (err) => status(`無法取得位置：${err.message}`, true), { enableHighAccuracy: true, timeout: 10000 });
 };
 
+// ---------- share: ?at=lat,lon&d=<m>&az=<deg>&el=<deg>&y=<year> ----------
+// `at` is the selected pixel (or the view centre); the camera distance, heading and tilt and the shown year are kept.
+function sharedView() {
+  const c = params.get('at') && parseCoords(params.get('at'));
+  if (!c) return null;
+  const num = (k, lo, hi, def) => { const v = parseFloat(params.get(k)); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def; };
+  return { lon: c[0], lat: c[1], d: num('d', 30, 400000, 1700), az: num('az', -360, 360, 200), el: num('el', 2, 89, 33), year: parseInt(params.get('y'), 10) };
+}
+function viewLonLat(lon, lat, dist, elevDeg, azDeg) {
+  const [X, Y] = lonLatToUtm(lon, lat, DISPLAY_ZONE);
+  const [wx, wy, wz] = toWorld(frame, DISPLAY_ZONE, X, Y, groundDisplay(X, Y));
+  const e = THREE.MathUtils.degToRad(elevDeg), a = THREE.MathUtils.degToRad(azDeg);
+  controls.target.set(wx, wy, wz); controls.autoRotate = false;
+  camera.position.set(wx + Math.sin(a) * Math.cos(e) * dist, wy + Math.sin(e) * dist, wz + Math.cos(a) * Math.cos(e) * dist);
+  lastMove = 0; lastFocus = null; controls.update();
+  return [wx, wy, wz];
+}
+function openShared(v) {
+  const [wx, wy, wz] = viewLonLat(v.lon, v.lat, v.d, v.el, v.az);
+  pin.position.set(wx, wy, wz); pin.visible = true;
+  const [X, Y] = lonLatToUtm(v.lon, v.lat, DISPLAY_ZONE);
+  if (entryDisplay(X, Y)) { selectWorld(wx, wz); status(`分享的位置 ${v.lat.toFixed(5)}, ${v.lon.toFixed(5)}`); }
+  else status(outside(), true);
+}
+function shareUrl() {
+  let wx = controls.target.x, wz = controls.target.z;
+  if (selected) [wx, , wz] = toWorld(frame, selected.tile.zone, selected.tile.x[selected.k], selected.tile.y[selected.k], 0);
+  const [lon, lat] = utmToLonLat(...worldToDisplayUtm(frame, wx, wz), DISPLAY_ZONE);
+  const u = new URL(location.href);
+  for (const k of ['at', 'd', 'az', 'el', 'y']) u.searchParams.delete(k);
+  u.searchParams.set('at', `${lat.toFixed(5)},${lon.toFixed(5)}`);
+  u.searchParams.set('d', String(Math.round(camera.position.distanceTo(controls.target))));
+  u.searchParams.set('az', String(Math.round(THREE.MathUtils.radToDeg(controls.getAzimuthalAngle()))));
+  u.searchParams.set('el', String(Math.round(90 - THREE.MathUtils.radToDeg(controls.getPolarAngle()))));
+  u.searchParams.set('y', String(years[Math.round(yearPos)]));
+  return u.toString().replace('%2C', ',');
+}
+$('share').onclick = async () => {
+  const url = shareUrl();
+  history.replaceState(null, '', url);
+  try { await navigator.clipboard.writeText(url); status('已複製這個視角的連結。'); }
+  catch { status(`連結：${url}`); }
+};
+
 $('aboutBtn').onclick = () => $('about').showModal();
 $('randomBtn').onclick = () => {
   const p = pickStart();
@@ -762,14 +810,8 @@ window.__app = {
   camAngles: () => ({ az: controls.getAzimuthalAngle(), pol: controls.getPolarAngle() }),
   flyTo, get trees() { return forest.count; }, get buildings() { return city.n; }, get treeStats() { return { ...forest.stats, triangles: Math.round(forest.triangles) }; }, get treeQ() { return treeQ; },
   renderInfo: () => renderer.info.render,
-  view: (lon, lat, dist, elevDeg, azDeg = 200) => {       // test hook: place the camera directly
-    const [X, Y] = lonLatToUtm(lon, lat, DISPLAY_ZONE);
-    const [wx, wy, wz] = toWorld(frame, DISPLAY_ZONE, X, Y, groundDisplay(X, Y));
-    const e = THREE.MathUtils.degToRad(elevDeg), a = THREE.MathUtils.degToRad(azDeg);
-    controls.target.set(wx, wy, wz); controls.autoRotate = false;
-    camera.position.set(wx + Math.sin(a) * Math.cos(e) * dist, wy + Math.sin(e) * dist, wz + Math.cos(a) * Math.cos(e) * dist);
-    lastMove = 0; controls.update();
-  }, get ready() { return terrain.length > 0; }, get loaded() { return { tiles: ds.tiles.size, loading: loading.size, coarse: coarse.size }; },
+  view: (lon, lat, dist, elevDeg, azDeg = 200) => { viewLonLat(lon, lat, dist, elevDeg, azDeg); },   // test hook
+  shareUrl, get ready() { return terrain.length > 0; }, get loaded() { return { tiles: ds.tiles.size, loading: loading.size, coarse: coarse.size }; },
 };
 
 requestAnimationFrame(tick);

@@ -217,6 +217,10 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   - The grade split-tones the image: cool shade, warm light.
   - Measured on an M2 Pro (1280×720): 23 ms at the 1.7 km test view (unchanged, because trees are not the bottleneck
     there: hiding them all saves < 1 ms); rebuilds 25–70 ms.
+- **Shareable views (2026-10-01):** `?at=lat,lon&d=<m>&az=<deg>&el=<deg>&y=<year>` opens at that point (pin + info panel,
+  timeline paused on `y`, no autorotate) instead of a random start; only `at` is required. The 分享 button builds the link
+  from the selected pixel (else the view centre), the camera distance/heading/tilt and the shown year, writes it to the
+  address bar and copies it (shows it in the status line if the clipboard is refused).
 - **Camera (2026-09-29):** MapControls: left-drag pans; right-drag, Shift/Ctrl/⌘+drag or a two-finger twist rotates. A
   control column (row on phones) adds rotate ±26°, tilt ±10°, and a compass that shows north and resets to north-up;
   keys Q/E rotate, R/F tilt, N north. Pending turns are eased and capped, so a held key keeps a steady pace.
