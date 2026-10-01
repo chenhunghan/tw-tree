@@ -45,6 +45,7 @@ const ZH = {
   sRevTitle: '營收估計（每隻 🦄 = 10 億美元）',
   sRevNow: (y, v, lo, hi) => `${y} 估計營收 <b>${v}</b> 億美元<span class="rng">（約 ${lo}–${hi}）</span>`,
   sRevCum: (v) => `累計約 ${v} 億美元`, sUnicorns: (k) => `🦄 × ${k}`,
+  sTreesLost: (n, per, m2) => `🌳 約 ${n} 棵樹的樹冠消失${per ? ` · 每隻 🦄 約 <b>${per} 棵樹</b>` : ' · 還沒有 🦄'}<span class="rng">（以每棵 ${m2} 平方公尺樹冠粗估）</span>`,
   sRevScaleMo: (v) => `每月 ${v} 億美元`, sRevScaleYr: (v) => `每年 ${v} 億美元`,
   sRevAria: '廠區估計營收', sRevLegend: '估計年營收', sRevRange: '可能範圍',
   langBtn: 'EN', langTitle: 'Switch to English',
@@ -82,6 +83,7 @@ const EN = {
   sRevTitle: 'Estimated revenue (each 🦄 = US$1 bn)',
   sRevNow: (y, v, lo, hi) => `Est. revenue ${y}: <b>US$${v} bn</b><span class="rng"> (≈${lo}–${hi})</span>`,
   sRevCum: (v) => `US$${v} bn so far`, sUnicorns: (k) => `🦄 × ${k}`,
+  sTreesLost: (n, per, m2) => `🌳 ≈ ${n} trees' canopy lost${per ? ` · ≈ <b>${per} trees per 🦄</b>` : ' · no 🦄 yet'}<span class="rng"> (rough: 1 tree ≈ ${m2} m² of canopy)</span>`,
   sRevScaleMo: (v) => `US$${v} bn / month`, sRevScaleYr: (v) => `US$${v} bn / year`,
   sRevAria: 'Estimated revenue of the site', sRevLegend: 'estimated revenue', sRevRange: 'likely range',
   langBtn: '中文', langTitle: '切換為中文',
@@ -98,6 +100,8 @@ export const pickLang = (rec, base) => (base ? rec[`${base}_${lang}`] ?? rec[`${
 // index.html is written in English; Traditional Chinese (Taiwan) for its marked elements. A key prefixed with the
 // attribute (`data-i18n-title:rotL`) is used where one key's Chinese differs by attribute.
 const DOM_ZH = {
+  headerOpen: "搜尋、我的位置、分享",
+  headerMini: "縮小",
   desc: "1984–2026 年臺灣樹冠覆蓋的 3D 時間軸，資料來自 Landsat 衛星。",
   h1: "臺灣樹冠時光機",
   pilot: "臺北試行版",

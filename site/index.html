@@ -36,22 +36,24 @@
 </script>
 <style>
   :root {
-    --ink: #1d2a22; --muted: #5b6b61; --panel: rgba(250, 250, 245, 0.88); --line: rgba(29, 42, 34, 0.14);
+    --ink: #1d2a22; --muted: #5b6b61; --panel: rgba(252, 252, 248, 0.5); --glass-edge: rgba(255, 255, 255, 0.55); --btn: rgba(255, 255, 255, 0.6); --line: rgba(29, 42, 34, 0.14);
     --forest: #2b6a3a; --leaf: #7fb069; --bare: #dcd4c2; --loss: #a8622d; --accent: #2b6a3a;
     font-family: "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
     color: var(--ink);
   }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #cfe0e8; }
   #scene { position: fixed; inset: 0; }
-  .panel { position: fixed; background: var(--panel); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 6px 24px rgba(20, 40, 30, 0.12); }
+  /* frosted glass (iOS-like): translucent fill, strong blur with a saturation lift, a light edge and top highlight */
+  .panel { position: fixed; background: var(--panel); backdrop-filter: blur(22px) saturate(180%); -webkit-backdrop-filter: blur(22px) saturate(180%);
+    border: 1px solid var(--glass-edge); border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(20, 40, 30, 0.16), inset 0 1px 0 rgba(255, 255, 255, 0.7); }
   header.panel { top: calc(12px + env(safe-area-inset-top, 0px)); left: 12px; padding: 12px 14px; width: min(420px, calc(100vw - 24px)); box-sizing: border-box; }
   h1 { margin: 0; font-size: 18px; letter-spacing: 0.04em; }
   h1 small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 6px; letter-spacing: 0; }
   .search { display: flex; gap: 6px; margin-top: 10px; }
-  .search input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: #fff; }
-  button { font: inherit; font-size: 13px; padding: 7px 11px; border-radius: 9px; border: 1px solid var(--line); background: #fff; color: var(--ink); cursor: pointer; white-space: nowrap; }
-  button:hover { background: #f1f4ee; }
+  .search input { flex: 1; min-width: 0; font: inherit; font-size: 14px; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.7); }
+  button { font: inherit; font-size: 13px; padding: 7px 11px; border-radius: 9px; border: 1px solid var(--line); background: var(--btn); color: var(--ink); cursor: pointer; white-space: nowrap; }
+  button:hover { background: rgba(255, 255, 255, 0.85); }
   button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
   button.primary:hover { background: #235a31; }
   .fov { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
@@ -92,7 +94,16 @@
   button.fold svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform 0.15s; }
   .panel.folded button.fold svg { transform: rotate(-90deg); }
   header.panel > button.fold { position: absolute; top: 10px; right: 8px; }
-  header.panel h1 { padding-right: 26px; }
+  header.panel > button.mini-btn { position: absolute; top: 10px; right: 34px; border: none; background: none; padding: 2px 4px; color: var(--muted); line-height: 0; }
+  header.panel > button.mini-btn svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+  /* minimised header (default): only a round search button; status messages show as a pill beside it */
+  #headerOpen { display: none; }
+  header.panel.mini { width: auto; padding: 0; border-radius: 50%; }
+  header.panel.mini > :not(#headerOpen):not(#searchStatus) { display: none !important; }
+  header.panel.mini #headerOpen { display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: none; border-radius: 50%; background: transparent; }
+  header.panel.mini #headerOpen svg { width: 20px; height: 20px; fill: none; stroke: var(--ink); stroke-width: 2.2; stroke-linecap: round; }
+  header.panel.mini #searchStatus:not(:empty) { position: absolute; left: 52px; top: 8px; white-space: nowrap; margin: 0; padding: 5px 10px; border-radius: 14px; background: var(--panel); border: 1px solid var(--line); }
+  header.panel h1 { padding-right: 52px; }
   .h2-btns { display: flex; align-items: center; gap: 2px; }
   #timeline.folded .legend { margin-top: 2px; }
   #side { position: fixed; top: calc(12px + env(safe-area-inset-top, 0px)); right: 12px; width: min(340px, calc(100vw - 24px)); max-height: calc(100vh - 190px); overflow: auto; display: flex; flex-direction: column; gap: 10px; z-index: 2; }
@@ -111,6 +122,7 @@
   #storyUni { margin-left: auto; font-weight: 700; color: #9c36b5; font-variant-numeric: tabular-nums; white-space: nowrap; }
   #storyRevNow { font-size: 12.5px; margin-top: 2px; font-variant-numeric: tabular-nums; }
   #storyRevNow b { font-size: 15px; } #storyRevNow .rng { color: var(--muted); font-size: 11.5px; }
+  #storyTrees { font-size: 12.5px; margin-top: 3px; } #storyTrees .rng { color: var(--muted); font-size: 11.5px; }
   #storyRevChart { width: 100%; height: 64px; display: block; margin-top: 4px; }
   #storyWait { left: 50%; top: 46%; transform: translate(-50%, -50%); padding: 9px 16px; font-size: 13px; font-weight: 600; border-radius: 20px; }
   #storyLabels { position: fixed; inset: 0; pointer-events: none; z-index: 0; }
@@ -123,7 +135,7 @@
   .blabel.building { color: var(--loss); }
   .blabel { transition: opacity 0.25s; } .blabel.under { opacity: 0.08; }
   .story-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
-  .story-actions select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: #fff; min-width: 0; flex: 1; }
+  .story-actions select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: var(--btn); min-width: 0; flex: 1; }
   #info h2 { font-size: 14px; margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; }
   #info .close { border: none; background: none; font-size: 18px; padding: 0 4px; }
   #info dl { display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; margin: 6px 0; }
@@ -133,7 +145,9 @@
   .note { color: var(--muted); font-size: 11px; line-height: 1.5; }
 
   #minimap { left: 12px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); padding: 0; cursor: pointer; border-radius: 10px; }
-  #credits { right: 12px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); padding: 5px 9px; font-size: 10.5px; color: var(--muted); border-radius: 8px; max-width: calc(100vw - 24px); box-sizing: border-box; }
+  #credits { right: 12px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); padding: 3px 7px; font-size: 9px; color: var(--muted); border-radius: 6px; max-width: calc(100vw - 24px); box-sizing: border-box;
+    background: rgba(250, 250, 245, 0.35); border-color: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; opacity: 0.55; transition: opacity 0.2s, background 0.2s; }
+  #credits:hover, #credits:focus-within { opacity: 1; background: var(--panel); }
   #credits a { color: inherit; }
   #loading { position: fixed; inset: 0; display: grid; place-items: center; background: #dfe9e4; z-index: 5; font-size: 14px; color: var(--muted); transition: opacity 0.6s; }
   #loading .bar { width: 220px; height: 4px; background: var(--line); border-radius: 2px; margin-top: 10px; overflow: hidden; }
@@ -169,7 +183,9 @@
 <body>
 <div id="scene"></div>
 
-<header class="panel">
+<header class="panel mini">
+  <button type="button" id="headerOpen" data-i18n-title="headerOpen" data-i18n-aria="headerOpen" title="Search, my location, share" aria-label="Search, my location, share"><svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5l5 5"/></svg></button>
+  <button type="button" class="mini-btn" id="headerMini" data-i18n-title="headerMini" data-i18n-aria="headerMini" title="Minimise" aria-label="Minimise"><svg viewBox="0 0 24 24"><path d="M6 12h12"/></svg></button>
   <button type="button" class="fold" data-fold="header" data-default="folded" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
   <h1><span data-i18n="h1">Taiwan Tree-Cover Time Machine</span><small>1984–2026 · <span id="regionName" data-i18n="pilot">Taipei pilot</span></small></h1>
   <form class="search" id="searchForm" autocomplete="off">
@@ -212,6 +228,7 @@
   <div id="storyRev" hidden>
     <div class="rev-head"><span id="storyRevTitle" class="fold-body"></span><span id="storyUni"></span></div>
     <div id="storyRevNow"></div>
+    <div id="storyTrees"></div>
     <svg id="storyRevChart" class="fold-body" viewBox="0 0 300 64" preserveAspectRatio="none" role="img"></svg>
     <p class="note fold-body" id="storyRevNote"></p>
   </div>
@@ -288,7 +305,7 @@
       <li><b>建築物是示意：</b>某像元在 GISA 資料中第一次成為不透水面（建成）的那一年，建築才會長出來；數量依 GHSL 2018 的建成面積比例，高度依 GHSL 2018 的建物高度，位置與形狀是程式產生的，不是真實建物輪廓。GISA 只記錄「第一次建成」，所以拆除、改建或都市綠化不會顯示；2021 年以後新建的也還沒有。夜間燈光同樣只是示意。</li>
       <li>地址搜尋使用 OpenStreetMap 的 Nominatim；臺灣門牌資料不完整，找不到時會逐步退到巷弄、路段或行政區，並顯示達到的精度。</li>
       <li><b>廠區故事</b>（含 <code>?story=</code> 的連結）是把同一套樹冠比例，平均到 OpenStreetMap 的廠區範圍與其周邊環帶；文中的興建日期來自所列的新聞與公司資料。廠房是 OpenStreetMap 的實際建物輪廓（不是示意），高度多為估計，出現的年份依 GISA 第一次建成的年份，或廠區樹冠消失的年份推估；半透明的是 OpenStreetMap 標示為興建中的建物。開啟故事時，廠區內不畫示意建築。</li>
-      <li><b>營收估計與獨角獸</b>：台積電只公布全公司營收，不公布各廠營收。故事中的廠區營收是估計：每月公布的營收，依當季各製程占晶圓營收的比例，再依本廠區在各製程產能中的估計占比拆分（封測廠依先進封裝營收占比與各封測廠的估計占比），以年均匯率換成美元；範圍依各項拆分的把握程度（約 ±10–45%）。2015 年後台積電不再公布各廠產能，之後的拆分多依新聞與分析師估計。每累積 10 億美元，就有一隻獨角獸從廠房飛出（純屬趣味）。資料與來源：<code>pipeline/analysis/tsmc_revenue_inputs.json</code>。</li>
+      <li><b>營收估計與獨角獸</b>：台積電只公布全公司營收，不公布各廠營收。故事中的廠區營收是估計：每月公布的營收，依當季各製程占晶圓營收的比例，再依本廠區在各製程產能中的估計占比拆分（封測廠依先進封裝營收占比與各封測廠的估計占比），以年均匯率換成美元；範圍依各項拆分的把握程度（約 ±10–45%）。2015 年後台積電不再公布各廠產能，之後的拆分多依新聞與分析師估計。每累積 10 億美元，就有一隻獨角獸從廠房飛出（純屬趣味）；「每隻 🦄 約幾棵樹」以消失的樹冠面積、每棵樹約 50 平方公尺樹冠粗估。資料與來源：<code>pipeline/analysis/tsmc_revenue_inputs.json</code>。</li>
     </ul>
     <h3>來源</h3>
     <ul>
@@ -326,7 +343,7 @@
       <li><b>Buildings are illustrative:</b> buildings rise in the year a pixel first becomes impervious (built) in the GISA data. Their number follows the GHSL 2018 built-up share and their height the GHSL 2018 building height; positions and shapes are generated, not real footprints. GISA records only first construction, so demolition, rebuilding and urban greening are not shown, and buildings after 2021 are not there yet. Night lights are illustrative too.</li>
       <li>Address search uses OpenStreetMap's Nominatim. House numbers in Taiwan are incomplete, so when one is not found the search falls back to the lane, road section or district and says how precise the result is.</li>
       <li><b>Site stories</b> (links with <code>?story=</code>) average the same tree-cover values over a site outline from OpenStreetMap and over a ring around it; construction dates in the text come from the cited news and company sources. Fab buildings are real OpenStreetMap footprints (not illustrative); heights are mostly estimates, and the year each appears comes from GISA's first-built year or the year the site's tree cover went. Translucent ones are tagged as under construction in OpenStreetMap. While a story is open, no illustrative buildings are drawn inside the site.</li>
-      <li><b>Revenue estimates and unicorns</b>: TSMC reports revenue only for the whole company, not per fab. A story's revenue is an estimate: each month's reported revenue is split by that quarter's share of wafer revenue per process node and by the site's estimated share of each node's capacity (packaging sites: by the advanced-packaging share and each site's estimated part of it), converted to US$ at the year's average rate. The range reflects how certain each split is (about ±10–45 %). TSMC stopped publishing per-fab capacity after 2014, so later splits rely mostly on press and analyst estimates. Every US$1 bn of the estimate sends one unicorn out of the fab (just for fun). Inputs and sources: <code>pipeline/analysis/tsmc_revenue_inputs.json</code>.</li>
+      <li><b>Revenue estimates and unicorns</b>: TSMC reports revenue only for the whole company, not per fab. A story's revenue is an estimate: each month's reported revenue is split by that quarter's share of wafer revenue per process node and by the site's estimated share of each node's capacity (packaging sites: by the advanced-packaging share and each site's estimated part of it), converted to US$ at the year's average rate. The range reflects how certain each split is (about ±10–45 %). TSMC stopped publishing per-fab capacity after 2014, so later splits rely mostly on press and analyst estimates. Every US$1 bn of the estimate sends one unicorn out of the fab (just for fun); "trees per 🦄" converts the canopy area lost at a rough 50 m² of crown per tree. Inputs and sources: <code>pipeline/analysis/tsmc_revenue_inputs.json</code>.</li>
     </ul>
     <h3>Sources</h3>
     <ul>

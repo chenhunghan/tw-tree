@@ -299,6 +299,13 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
     per US$1 bn as the timeline plays forward. Revenue for year Y accrues while Y is shown. Above 80 in the air, the
     oldest fade early.
   - Social previews (`render_og.py`, English only): 🌳 before → after vs 🦄 × total, with a flock in the "after" half.
+  - Trees per unicorn: canopy lost (lost_ha, reached across the clearing years) at 50 m² of crown per tree (200 trees
+    per ha, `TREE_M2` in story.js and render_og.py) over unicorns so far, live in the card and on the previews (Fab 14
+    ≈ 2,900 trees, ≈ 15 per 🦄; Fab 18 ≈ 14; AP6 ≈ 129).
+- **UI chrome (2026-10-01):** panels are frosted glass (50 % fill, blur 22 px + saturate 180 %, light edge and top
+  highlight). The header starts minimised to a round search button (`header.mini`; "–" minimises it again, remembered in
+  localStorage `tpetree.header.mini`; status messages show as a pill beside the icon). Credits are small and faded
+  until hovered. The story picker shows short names (Fab 25, AP6, R&D Center; the full name is the option's title).
 - **Fab buildings in stories (2026-10-01):** `pipeline/analysis/site_buildings.py` adds each story's OSM building
   footprints (Overpass query in `pipeline/analysis/tsmc_buildings_overpass.txt`) to `site/stories/tsmc.json`: centroid
   inside the outline (+40 m), ≥ 400 m², not residential/religious, named ones only if fab-like (P1, CUP, 廠 …),

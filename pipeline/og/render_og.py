@@ -128,6 +128,12 @@ def revenue_bn(s):
     if not r: return None
     return sum(v for y, v in zip(r['years'], r['usd']) if y <= doc['years'][-1])
 
+TREE_M2 = 50                       # canopy area of one tree, as in the app (js/story.js)
+def trees_lost(s): return round(s['lost_ha'] * 10000 / TREE_M2 / 100) * 100
+def per_unicorn(s, bn):
+    p = trees_lost(s) / int(bn)
+    return f'{p:,.0f}' if p >= 10 else f'{p:.1f}'
+
 def compose(s, before, after, out):
     A, B = Image.open(before).convert('RGB'), Image.open(after).convert('RGB')
     img = Image.new('RGB', (W, H))
@@ -147,8 +153,8 @@ def compose(s, before, after, out):
     run(img, 32, H - 190, parts, 54)
     d.text((34, H - 112), s['en'], font=font(FONT_B, 32), fill=(240, 244, 240))
     small = (font(FONT_L, 25), (255, 214, 170))
-    parts = [('t', f"{round(s['lost_ha'])} ha of tree canopy lost", *small)]
-    if bn and bn >= 1: parts += [('t', f"  ·  est. US${int(bn):,} bn revenue (1 ", *small), ('e', '🦄'), ('t', ' = US$1 bn)', *small)]
+    parts = [('t', f"≈ {trees_lost(s):,} trees' canopy lost ({round(s['lost_ha'])} ha)", *small)]
+    if bn and bn >= 1: parts += [('t', f"  ·  ≈ {per_unicorn(s, bn)} trees per ", *small), ('e', '🦄'), ('t', f" (US$1 bn of est. revenue)", *small)]
     run(img, 34, H - 64, parts, 25)
     credit = 'Landsat USGS  /  ESA WorldCover  /  © OpenStreetMap  /  tw-tree'
     f = font(FONT_L, 15); w = d.textlength(credit, font=f)
@@ -211,7 +217,8 @@ def page(s):
     a0, a1 = s['after']
     desc = (f"Tree cover inside the site averaged {sb}% in {s['before'][0]}–{s['before'][1]} and {sa}% in "
             f"{a0 if a0 == a1 else f'{a0}–{a1}'}: about {round(s['lost_ha'])} ha of canopy lost."
-            + (f" Estimated revenue since: about US${int(bn):,} bn, one 🦄 per billion." if bn and bn >= 1 else '')
+            + (f" Estimated revenue since: about US${int(bn):,} bn, one 🦄 per billion: ≈ {per_unicorn(s, bn)} trees per 🦄"
+               f" (≈ {trees_lost(s):,} trees, at {TREE_M2} m² of canopy each)." if bn and bn >= 1 else '')
             + " 3D Landsat timeline 1984–2026.")
     alt = (f"{s['en']} in 3D: the site in {s['before'][1]} with {sb}% tree cover (left) and in {doc['years'][-1]} with {sa}%"
            + (", unicorns flying out of the fab" if bn and bn >= 1 else '') + " (right)")

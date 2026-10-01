@@ -36,6 +36,15 @@ function setFold(btn, folded, save = true) {
   btn.setAttribute('aria-expanded', String(!folded)); btn.title = btn.ariaLabel = t(folded ? 'expand' : 'collapse');
   if (save && btn.dataset.persist !== 'no') try { localStorage.setItem('tpetree.fold.' + btn.dataset.fold, folded ? '1' : '0'); } catch {}
 }
+// The header starts minimised to a round search button (remembered in this browser); "–" minimises it again.
+{
+  const hd = document.querySelector('header.panel');
+  let mini = true; try { mini = localStorage.getItem('tpetree.header.mini') !== '0'; } catch {}
+  const setMini = (m) => { hd.classList.toggle('mini', m); try { localStorage.setItem('tpetree.header.mini', m ? '1' : '0'); } catch {} };
+  hd.classList.toggle('mini', mini);
+  $('headerOpen').onclick = () => { setMini(false); $('q').focus({ preventScroll: true }); };
+  $('headerMini').onclick = (e) => { e.stopPropagation(); setMini(true); };
+}
 for (const btn of document.querySelectorAll('button.fold')) {
   let saved = null;
   try { saved = localStorage.getItem('tpetree.fold.' + btn.dataset.fold); } catch {}

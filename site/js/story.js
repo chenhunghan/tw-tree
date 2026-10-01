@@ -13,8 +13,16 @@ import { Unicorns } from './unicorns.js';
 
 const $ = (id) => document.getElementById(id);
 const SLOW = 0.5, MID = 1.2;                   // years per second: through the clearing and around each building's year / else
+const TREE_M2 = 50;                            // canopy area of one tree (m², a mature lowland broadleaf crown): ha lost -> trees
 const LEAD = 3;                                // playback starts this many years before the clearing
 const HOLD_OPEN = 1500, HOLD_REPLAY = 1000;   // ms on the first year once the site is ready (read the card)
+
+// Short site name for the picker (the card's title has the full one): Fab 25, AP6, R&D Center
+function shortName(s) {
+  const m = s.id.match(/-(fab|ap)(\d+)$/);
+  if (m) return m[1] === 'fab' ? `Fab ${m[2]}` : `AP${m[2]}`;
+  return pickLang(s).replace(/^台積電|^TSMC\s*/, '').replace(/[（(].*$/, '').replace(/^Global\s*/, '').trim();
+}
 
 export class Story {
   // app: { scene, years(), ground(lon, lat) -> world [x, y, z], view(lon, lat, d, el, az, animate), setYear(i, play),
@@ -48,7 +56,7 @@ export class Story {
     this.data = await r.json(); this.coll = coll;
     const pick = $('storyPick');
     pick.innerHTML = `<option value="" disabled>${t('sOther')}</option>` +
-      this.data.stories.map(s => `<option value="${s.id}">${pickLang(s)}</option>`).join('');
+      this.data.stories.map(s => `<option value="${s.id}" title="${pickLang(s)}">${shortName(s)}</option>`).join('');
   }
 
   // Open a story by id (animate: fly there from the current view). Returns false if it does not exist.
@@ -235,6 +243,10 @@ export class Story {
     const v = i < 0 ? 0 : r.months ? r.months[i][mo] : ann / 12, kLo = ann ? (r.lo?.[i] ?? ann) / ann : 1, kHi = ann ? (r.hi?.[i] ?? ann) / ann : 1;
     const when = new Date(Date.UTC(y, mo, 1)).toLocaleDateString(lang === 'zh' ? 'zh-TW' : 'en-US', { year: 'numeric', month: 'short', timeZone: 'UTC' });
     const cum = this.revenueAt(yf);                // no revenue that month: no readout (and no unicorns)
+    // trees given up per unicorn: the measured canopy loss (reached across the clearing years) over unicorns so far
+    const s = this.cur, ramp = Math.max(0, Math.min(1, (yf - s.change[0] + 0.5) / (s.change[1] - s.change[0] + 1)));
+    const trees = Math.round(s.lost_ha * ramp * 10000 / TREE_M2 / 100) * 100, uni = Math.floor(cum);
+    $('storyTrees').innerHTML = trees > 0 ? t('sTreesLost', trees.toLocaleString(), uni ? (trees / uni >= 10 ? Math.round(trees / uni) : (trees / uni).toFixed(1)) : null, TREE_M2) : '';
     $('storyRevNow').innerHTML = [v > 0 ? t('sRevNow', when, f(v), f(v * kLo), f(v * kHi)) : '', cum > 0 ? t('sRevCum', f(cum)) : ''].filter(Boolean).join(' · ');
     const rl = $('storyRevYear');
     if (rl) { const x = this.rxp(y - 0.5 + (mo + 0.5) / 12); rl.setAttribute('x1', x); rl.setAttribute('x2', x); }
