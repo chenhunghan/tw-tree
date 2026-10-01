@@ -209,6 +209,14 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   out), 900 m oblique view 60k / 1.62M (was 20k / 1.11M); steady rebuilds ~50 ms. Frame timing on the test machine was
   too noisy to compare (GPU timer 50–98 ms for identical frames; another GPU load was running). In the 900 m oblique
   view, freezing the shadow map was the one toggle that clearly sped frames up (to the 16.7 ms vsync floor); not yet fixed.
+- **Far trees (2026-10-01):** at story distances (~12 km) nearly every tree is thinned (stride 4–8), and two problems
+  showed: (1) whole 120–240 m blocks blinked year to year, because one pixel's noisy value switched 4 widened crowns;
+  (2) each widened crown was one smooth squashed ellipsoid ("green beans"). Now thinned instances take their block's
+  mean gap-filled cover (`blockCover`, cached per tile and stride; water/other-zone pixels count 0, so cover is kept;
+  refs carry log2(stride) in bits 24+ of the tile index), and use a `grove` LOD: the species' distant crown as five
+  irregular, uneven crowns of differing shade (same footprint). The growth band is ±0.10 (was ±0.07), so trees near their
+  threshold grow and shrink instead of blinking. Measured on an M2 Pro at 1280×720: 12 km story view 30k instances / 3.1M tri
+  (was 0.7M), 2.5 km oblique 81k / 5.1M, both at the 16.7 ms vsync floor with treeQ 1.
 - **Forest realism (2026-10-01, ideas from boring-forest.vercel.app):**
   - Conifers (cypress, hemlock, fir) are grown as whorls of branches. Each branch carries needle-spray cards along it:
     near = 2 cards per branch, folded along the stem so they never vanish edge-on; mid = every 2nd whorl, 1 flat card.

@@ -14,7 +14,7 @@ export const NEAR_DIST = 320;          // metres from the camera: leaf-card crow
 export const MID_DIST = 1500;          // simplified crowns inside, envelopes only outside
 export const FAR_DIST = 3000;          // envelopes with trunks inside, crowns only (no trunk) beyond
 const STRIDE_PX = 10;                  // a stride-widened crown (~15 m x stride) stays below this many screen pixels
-const LODS = ['near', 'mid', 'far', 'dist'];
+const LODS = ['near', 'mid', 'far', 'dist', 'grove'];   // grove: thinned (stride > 1) instances
 const CLOSURE = 1.5;                   // horizontal crown scale: 4 crowns per 30 m pixel close the canopy at 100 %
 const INST_ATTRS = [['aTint', 3], ['aThr', 1], ['aFa', 1], ['aFb', 1], ['aNd', 1]];
 
@@ -248,6 +248,28 @@ function frond({ base = [0, 0, 0], ang = 0, len = 3.5, width = 0.9, lift = 0.35,
 }
 
 const merge = (parts) => mergeGeometries(parts);
+
+// A thinned instance stands for a block of st x st pixels with crowns st x wider. One widened crown reads as a smooth
+// blob ("green bean"), so its template is the species' distant crown as four half-width crowns of uneven height and
+// shade (same footprint, same cover), and the block reads as a stand of trees.
+function grove(make, seed) {
+  const base = make(), R = rng(97 + seed * 31);
+  base.computeBoundingBox();
+  const bb = base.boundingBox, cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2;
+  const r = Math.max(bb.max.x - bb.min.x, bb.max.z - bb.min.z) / 2;
+  // five crowns of uneven size, irregularly placed (a regular 2 x 2 reads as a four-leaf clover)
+  const crowns = [0.5, 0.46, 0.42, 0.38, 0.3].map((w, i) => {
+    const a = i * 2.4 + R() * 0.9, d = i === 0 ? 0.12 : 0.42 + R() * 0.2;
+    return { w: w + R() * 0.08, x: Math.cos(a) * d, z: Math.sin(a) * d };
+  });
+  return merge(crowns.map(({ w, x, z }) => {
+    const g = base.clone(), h = (0.7 + R() * 0.4) * (0.75 + 0.5 * w);
+    g.translate(-cx, 0, -cz); g.scale(w, h, w); g.translate(cx + x * r, 0, cz + z * r);
+    const col = g.attributes.aCol, k = 0.78 + R() * 0.38, warm = (R() - 0.5) * 0.12;
+    for (let j = 0; j < col.count; j++) col.setXYZ(j, col.getX(j) * k * (1 + warm), col.getY(j) * k, col.getZ(j) * k * (1 - warm));
+    return g;
+  }));
+}
 const ring = (n, fn) => Array.from({ length: n }, (_, i) => fn(i, (i / n) * Math.PI * 2));
 
 // One ellipsoid around a set of clusters: the mid and far crown.
@@ -511,7 +533,7 @@ uniform float uT; uniform float uTime; uniform float uWindS;
 varying vec2 vLeafUv; varying float vPart;`;
 const GEOM_BODY = /* glsl */`
   float fT = mix(aFa, aFb, uT) / 100.0;
-  float sT = smoothstep(aThr - 0.07, aThr + 0.07, fT);
+  float sT = smoothstep(aThr - 0.1, aThr + 0.1, fT);
   transformed *= max(sT, 0.0);
   vec3 ip = vec3(instanceMatrix[3][0], instanceMatrix[3][1], instanceMatrix[3][2]);
   float hh = max(position.y, 0.0);
@@ -583,6 +605,30 @@ function makeDepthMaterial(uniforms, leafTex) {
   return m;
 }
 
+// Mean gap-filled cover of each aligned st x st block per year (pixels of the other zone and water count as 0, so the
+// widened crowns spread over the block keep its cover) and its maximum over the years; cached on the tile.
+function blockCover(tile, st, years) {
+  tile.blk ??= {};
+  const c = tile.blk[st];
+  if (c && c.years === years) return c;
+  const P = tile.P ?? Math.round(Math.sqrt(tile.z.length)), bw = P / st, nb = bw * bw, inv = 1 / (st * st);
+  const ok = new Uint8Array(P * P), bi = new Int32Array(P * P);
+  for (let k = 0; k < P * P; k++) {
+    ok[k] = (!tile.own || tile.own[k]) && (tile.land ? tile.land[k] : tile.z[k] * EXAG >= 1.2) ? 1 : 0;
+    bi[k] = ((k / P | 0) / st | 0) * bw + ((k % P) / st | 0);
+  }
+  const filled = {}, maxF = new Uint8Array(nb), sum = new Float32Array(nb);
+  for (const y of years) {
+    const a = tile.filled[y], out = new Uint8Array(nb);
+    sum.fill(0);
+    for (let k = 0; k < a.length; k++) if (ok[k]) sum[bi[k]] += a[k];
+    for (let b = 0; b < nb; b++) { out[b] = Math.round(sum[b] * inv); if (out[b] > maxF[b]) maxF[b] = out[b]; }
+    filled[y] = out;
+  }
+  tile.blkP = P;
+  return (tile.blk[st] = { years, filled, maxF });
+}
+
 // ---------- forest ----------
 export class Forest {
   constructor(scene, uniforms) {
@@ -590,11 +636,11 @@ export class Forest {
     this.buckets = new Map();
     const leafTex = leafAtlas();
     const mat = makeMaterial(uniforms, leafTex), depth = makeDepthMaterial(uniforms, leafTex);
-    for (const sp of SPECIES) {
+    SPECIES.forEach((sp, si) => {
       for (const lod of LODS) {
-        this.buckets.set(`${sp.key}:${lod}`, { sp, lod, template: (sp[lod] ?? sp.far)(), mat, depth, mesh: null, cap: 0, n: 0, refs: null });
+        this.buckets.set(`${sp.key}:${lod}`, { sp, lod, template: lod === 'grove' ? grove(sp.dist ?? sp.far, si) : (sp[lod] ?? sp.far)(), mat, depth, mesh: null, cap: 0, n: 0, refs: null });
       }
-    }
+    });
     this.tileList = [];
     this.visible = true;
   }
@@ -654,8 +700,9 @@ export class Forest {
       const hue = rand(), val = 0.86 + rand() * 0.26;
       L.tint[n * 3] = val * (0.94 + hue * 0.1); L.tint[n * 3 + 1] = val * (0.97 + hue * 0.06); L.tint[n * 3 + 2] = val * (0.9 + (1 - hue) * 0.12);
       L.thr[n] = thr;
-      L.refs[n * 2] = ti; L.refs[n * 2 + 1] = k;
+      L.refs[n * 2] = ti | (sl << 24); L.refs[n * 2 + 1] = k;
     };
+    let sl = 0;                                                // log2 of the current block's stride (for refs)
     const push = (L) => {
       if (L.n === L.cap) {
         const cap = Math.max(1024, L.cap * 2), grow = (a, k, T) => { const b = new T(cap * k); if (a) b.set(a); return b; };
@@ -705,10 +752,13 @@ export class Forest {
         const cdx = bx - camPos.x, cdy = tile.z[kc] * EXAG - camPos.y, cdz = bz - camPos.z, dc2 = cdx * cdx + cdy * cdy + cdz * cdz;
         let st = dc2 <= thin2 ? 1 : dc2 > 16 * thin2 ? 8 : dc2 > 4 * thin2 ? 4 : 2;     // stride by distance to the camera
         while (st > 1 && (st * 15) ** 2 > dc2 * (STRIDE_PX * pixAng) ** 2) st >>= 1;    // ... capped by on-screen size
+        sl = 31 - Math.clz32(st);
+        // a thinned pixel's trees follow its block's mean cover, not its own noisy value (else whole blocks blink)
+        const blk = st > 1 ? blockCover(tile, st, years) : null, bw = P / st;
         for (let row = br; row < Math.min(br + B, r1 + 1); row += st) for (let col = bcol; col < Math.min(bcol + B, c1 + 1); col += st) {
           if (row < r0 || col < c0) continue;
           const k = row * P + col;
-          const maxF = maxFs[k];
+          const maxF = blk ? blk.maxF[(row / st) * bw + col / st] : maxFs[k];
           if (maxF < 8) continue;                                   // never enough cover for a tree
           if ((tile.own && !tile.own[k]) || (tile.land && !tile.land[k])) continue;   // other zone's pixel, or water
           if (!tile.land && tile.z[k] * EXAG < 1.2) continue;                    // no water mask: DEM ~0 m is drawn as water
@@ -742,7 +792,7 @@ export class Forest {
             const ang = rand() * Math.PI * 2, cs = Math.cos(ang), sn = Math.sin(ang);
             const size = spec.size[0] + rand() * (spec.size[1] - spec.size[0]);
             const ddx = px - camPos.x, ddy = py - camPos.y, ddz = pz - camPos.z, c2 = (ddx * ddx + ddy * ddy + ddz * ddz) / (size * size);
-            const lod = c2 < near2 ? 0 : c2 < mid2 ? 1 : c2 < far2 ? 2 : 3;
+            const lod = st > 1 ? 4 : c2 < near2 ? 0 : c2 < mid2 ? 1 : c2 < far2 ? 2 : 3;
             // widen crowns where the canopy is dense (street trees in sparse pixels stay slimmer); a stride block's
             // crowns are st x wider (same cover) and somewhat taller
             const wide = size * (1 + (CLOSURE - 1) * smooth(30, 80, maxF)) * st;
@@ -789,9 +839,14 @@ export class Forest {
       if (!b.mesh || !b.n) continue;
       const g = b.mesh.geometry.attributes;
       for (let i = 0; i < b.n; i++) {
-        const t = this.tileList[b.refs[i * 2]], k = b.refs[i * 2 + 1];
-        g.aFa.array[i] = t.filled[yA][k];
-        g.aFb.array[i] = t.filled[yB][k];
+        const r = b.refs[i * 2], t = this.tileList[r & 0xffffff], k = b.refs[i * 2 + 1], sl = r >>> 24;
+        if (sl) {
+          const P = t.blkP, bk = ((k / P | 0) >> sl) * (P >> sl) + ((k % P) >> sl), f = t.blk[1 << sl].filled;
+          g.aFa.array[i] = f[yA][bk]; g.aFb.array[i] = f[yB][bk];
+        } else {
+          g.aFa.array[i] = t.filled[yA][k];
+          g.aFb.array[i] = t.filled[yB][k];
+        }
         g.aNd.array[i] = t.nodata[yA][k] | t.nodata[yB][k];
       }
       g.aFa.needsUpdate = g.aFb.needsUpdate = g.aNd.needsUpdate = true;
