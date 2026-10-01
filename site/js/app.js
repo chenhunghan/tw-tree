@@ -48,7 +48,7 @@ for (const btn of document.querySelectorAll('button.fold')) {
 // off early depth rejection (and hidden-surface removal on Apple GPUs), so every overlapping fragment is shaded.
 const reverseZ = params.get('depth') !== 'log' && !!document.createElement('canvas').getContext('webgl2')?.getExtension('EXT_clip_control');
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false,
-  reverseDepthBuffer: reverseZ, logarithmicDepthBuffer: !reverseZ });
+  reversedDepthBuffer: reverseZ, logarithmicDepthBuffer: !reverseZ });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -89,7 +89,10 @@ class MsaaRenderPass extends Pass {
   constructor(scene, camera) {
     super();
     this.scene = scene; this.camera = camera; this.needsSwap = false;
-    this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4 });
+    // reversed-Z only gains precision with a float depth buffer; three allocates DEPTH_COMPONENT32F only for a float
+    // depth texture (else 24-bit fixed point, where low land and the sea plane 1.5 m below it z-fight far away)
+    this.target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: 4,
+      depthTexture: reverseZ ? new THREE.DepthTexture(1, 1, THREE.FloatType) : null });
     this.copy = new FullScreenQuad(new THREE.ShaderMaterial({ ...CopyShader, uniforms: THREE.UniformsUtils.clone(CopyShader.uniforms), depthTest: false, depthWrite: false }));
     this.copy.material.uniforms.tDiffuse.value = this.target.texture;
   }

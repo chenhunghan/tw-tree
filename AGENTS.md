@@ -264,7 +264,7 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
 - **Rendering cost (2026-10-01):** the slow low oblique view was not the shadow map (that measurement was GPU noise
   from another tab). Measured with WebGL timer queries (`EXT_disjoint_timer_query_webgl2`) at 1280×720 on the M2 Pro:
   the logarithmic depth buffer (gl_FragDepth turns off early-z / Apple's hidden-surface removal) and post passes on
-  4× MSAA half-float targets were the cost. Now: reversed-Z depth (`reverseDepthBuffer`, needs `EXT_clip_control`;
+  4× MSAA half-float targets were the cost. Now: reversed-Z depth (`reversedDepthBuffer`, needs `EXT_clip_control`, plus a float `DepthTexture` on the scene target so three allocates DEPTH_COMPONENT32F;
   `?depth=log` or no extension falls back to log depth); the scene renders into its own MSAA target, resolved once
   (`MsaaRenderPass`), and post passes run single-sample; bloom runs at half resolution and only when `uNight` > 0.02
   (in daylight nothing passes its threshold). Low oblique view GPU time ~106 → 7.7 ms (same session A/B: log depth
