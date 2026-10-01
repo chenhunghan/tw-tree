@@ -231,7 +231,7 @@ if not a.pages_only:
     for s in stories:
         b, f = tmp / f"{s['id']}_before.png", tmp / f"{s['id']}_after.png"
         # closer than the story's opening view: each half is only 600 px wide, the fab should fill it
-        capture(f"{base}?story={s['id']}&ui=0&lang=en&weather=clear&hour=10.5&trees=1&d={round(s['d'] * 0.82)}&el=50",
+        capture(f"{base}?story={s['id']}&ui=0&lang=en&weather=clear&hour=10.5&trees=1&d={round(s['d'] * 1.78)}&el=50",
                 [(s['before'][1], b), (doc['years'][-1], f, *([UNICORN_JS] if revenue_bn(s) else []))])
         compose(s, b, f, SITE / 'og' / f"{s['id']}.jpg")
         print('og', s['id'])

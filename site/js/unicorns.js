@@ -6,9 +6,9 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
-const MAX = 128, SOFT = 80;      // unicorns in the air at once (more crossings are still counted); beyond SOFT the oldest fade
+const MAX = 240, SOFT = 200;      // unicorns in the air at once (more crossings are still counted); beyond SOFT the oldest fade
 const FADE = 0.6;               // seconds of the fade-out at the end of a flight
-const LIFE = 5.2;               // seconds in the air
+const LIFE = 7;                 // seconds in the air (long enough to leave the window before fading)
 const TRAIL = 1.7, SEG = 28;    // rainbow trail: seconds of flight behind each unicorn, segments along it
 const COAT = '#f7f4fb', HOOF = '#8a7f8e', GOLD = '#f1c453';
 const RAINBOW = ['#ff6b8b', '#ffa94d', '#ffe066', '#69db7c', '#4dabf7', '#9775fa'];
@@ -134,10 +134,11 @@ export class Unicorns {
       climb: 0.8 + Math.random() * 0.5, ph: Math.random() * 6.28 });
   }
 
-  // position along the flight at time t: a widening, climbing spiral out of the roof
+  // position along the flight at time t: up out of the roof, then outward on a gently curving, accelerating path to
+  // ~1.3 camera distances (size is ~1.6 % of it), past the edges of the window before the fade
   #at(u, t, out) {
-    const k = t / LIFE, r = u.size * (1.5 + 15 * k ** 0.85), a = u.th + u.turn * t;
-    return out.set(u.o.x + Math.cos(a) * r, u.o.y + u.size * u.climb * (1.2 + 7.5 * k ** 1.15), u.o.z + Math.sin(a) * r);
+    const k = t / LIFE, r = u.size * (1.5 + 82 * k ** 1.35), a = u.th + u.turn * 0.3 * t;
+    return out.set(u.o.x + Math.cos(a) * r, u.o.y + u.size * u.climb * (1.2 + 6 * k ** 0.8 + 10 * k ** 2), u.o.z + Math.sin(a) * r);
   }
 
   update(dt, camPos) {
