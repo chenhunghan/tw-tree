@@ -158,7 +158,13 @@ export function makeTerrainMaterial(uniforms) {
         // near: sparse street lamps (the 3D buildings carry the windows); far: a warm glow of the whole built-up area
         float camD = length(cameraPosition - vWorld);
         float far = smoothstep(4000.0, 20000.0, camD);
-        float lamp = mix(step(0.88, th12(floor(vWorld.xz / 9.0))) * 1.6, 0.4 + 1.0 * pow(th12(floor(vWorld.xz / 60.0)), 2.0), far);
+        // lamps: one per lit 14 m cell at a jittered spot, a bright core in a soft pool of light (round, not cell
+        // squares); once a pool is under ~2 screen pixels it turns into its mean brightness (no sparkle)
+        vec2 lc = floor(vWorld.xz / 14.0), lo = (lc + 0.2 + 0.6 * vec2(th12(lc + 17.3), th12(lc + 41.7))) * 14.0;
+        float ld = length(vWorld.xz - lo), lpx = length(fwidth(vWorld.xz));
+        float pool = step(0.86, th12(lc)) * (exp(-ld * ld / 12.0) * 0.9 + smoothstep(1.1, 0.4, ld) * 1.4);
+        float lamp = mix(pool, 0.11, smoothstep(1.5, 4.0, lpx));
+        lamp = mix(lamp, 0.4 + 1.0 * pow(th12(floor(vWorld.xz / 60.0)), 2.0), far);
         gl_FragColor.rgb += vec3(1.0, 0.7, 0.36) * isB * (vBs / 100.0) * uNight * lamp * mix(0.35, 1.3, far) * (1.0 - wm);`);
   };
   return m;

@@ -384,6 +384,9 @@ The v2 pilot total rose from ~54 % (2013) to ~64 % (2021) and then stayed flat. 
   construction dates. The app draws illustrative instanced buildings (1–3 per built pixel by `bs`, height from `bh`) that
   rise in the pixel's first-built year, tints built-up ground once that year passes, and shows city lights at night.
   GISA only records first construction (no demolition or re-greening) and ends in 2021.
+  Night street lamps on built ground (terrain shader): one per lit 14 m cell (14 %) at a jittered spot, a bright core in a
+  soft round pool; under ~2 screen px per pool they turn into their mean brightness (were hard 9 m squares, which read as
+  a bug on story sites where the illustrative buildings are removed).
 - **Format v2 tiles** (`tpetree tile v2`): frac `x_utm, y_utm, z_m, own, land, built, bh, bs, f<year>`; `overview.arrow.gz` (480 m blocks
   of owned land pixels); index.json `totals` (gap-filled and observed land tree hectares per year), `complete`,
   `tiles_planned`, `scenes_per_year_zone`. Gzip is written with mtime 0, so unchanged tiles are byte-identical and are not
