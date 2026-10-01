@@ -186,7 +186,14 @@ PAGE = """<!doctype html>
 <meta name="twitter:title" content="{title}">
 <meta name="twitter:description" content="{desc}">
 <meta name="twitter:image" content="{image}">
-<link rel="canonical" href="{app}">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="zh_TW">
+<meta property="og:image:type" content="image/jpeg">
+<meta property="og:image:alt" content="{alt}">
+<meta name="twitter:image:alt" content="{alt}">
+<meta name="theme-color" content="#2f6b3a">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%8C%B3%3C/text%3E%3C/svg%3E">
+<link rel="canonical" href="{url}">
 <script>
   // forward to the app with this story, keeping any view parameters on the link (at, d, az, el, from, lang)
   var q = location.search ? '&' + location.search.slice(1) : '';
@@ -206,9 +213,11 @@ def page(s):
             f"{a0 if a0 == a1 else f'{a0}–{a1}'}: about {round(s['lost_ha'])} ha of canopy lost."
             + (f" Estimated revenue since: about US${int(bn):,} bn, one 🦄 per billion." if bn and bn >= 1 else '')
             + " 3D Landsat timeline 1984–2026.")
+    alt = (f"{s['en']} in 3D: the site in {s['before'][1]} with {sb}% tree cover (left) and in {doc['years'][-1]} with {sa}%"
+           + (", unicorns flying out of the fab" if bn and bn >= 1 else '') + " (right)")
     e = lambda x: html.escape(x, quote=True)
     out = SITE / 's' / s['id']; out.mkdir(parents=True, exist_ok=True)
-    (out / 'index.html').write_text(PAGE.format(title=e(title), desc=e(desc), image=f"{BASE}og/{s['id']}.jpg",
+    (out / 'index.html').write_text(PAGE.format(title=e(title), desc=e(desc), alt=e(alt), image=f"{BASE}og/{s['id']}.jpg",
                                                 url=f"{BASE}s/{s['id']}/", app=f"{BASE}?story={s['id']}", id=s['id']))
 
 
