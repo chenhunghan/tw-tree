@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Taiwan Tree-Cover Time Machine</title>
-<meta name="description" data-i18n-content="desc" content="A 3D timeline of tree cover in Taiwan, 1984–2026, from Landsat satellite imagery.">
+<meta name="description" data-i18n-content="desc" content="3D timeline of tree cover in Taiwan, 1984–2026, from Landsat satellite imagery.">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Taiwan Tree-Cover Time Machine">
 <meta property="og:title" content="🌳 Taiwan Tree-Cover Time Machine 1984–2026">
@@ -170,30 +170,30 @@
 
 <header class="panel">
   <button type="button" class="fold" data-fold="header" data-default="folded" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
-  <h1><span data-i18n="h1">臺灣樹冠時光機</span><small>1984–2026 · <span id="regionName" data-i18n="pilot">臺北試行版</span></small></h1>
+  <h1><span data-i18n="h1">Taiwan Tree-Cover Time Machine</span><small>1984–2026 · <span id="regionName" data-i18n="pilot">Taipei pilot</span></small></h1>
   <form class="search" id="searchForm" autocomplete="off">
-    <input id="q" type="search" data-i18n-ph="q" data-i18n-aria="qAria" placeholder="地址、地標或座標，例：臺北101、25.0339, 121.5645" aria-label="搜尋地點">
-    <button class="primary" type="submit" data-i18n="go">前往</button>
-    <button type="button" id="gps" data-i18n="gps" data-i18n-title="gpsTitle" title="使用裝置定位">我的位置</button>
-    <button type="button" id="share" data-i18n="share" data-i18n-title="shareTitle" title="複製目前視角（位置、方向、年份）的連結">分享</button>
+    <input id="q" type="search" data-i18n-ph="q" data-i18n-aria="qAria" placeholder="Address, landmark or coordinates, e.g. Taipei 101, 25.0339, 121.5645" aria-label="Search for a place">
+    <button class="primary" type="submit" data-i18n="go">Go</button>
+    <button type="button" id="gps" data-i18n="gps" data-i18n-title="gpsTitle" title="Use device location">My location</button>
+    <button type="button" id="share" data-i18n="share" data-i18n-title="shareTitle" title="Copy a link to this view (place, heading, year)">Share</button>
   </form>
   <div id="searchStatus"></div>
   <div class="fold-body">
-  <div class="wx" data-i18n-aria="wxAria" aria-label="天氣（裝飾用）">
-    <span class="wx-label" data-i18n="wx" data-i18n-title="wxTitle" title="天氣與時間只是畫面效果，不是實際資料">天氣</span>
-    <button type="button" data-wx="clear" data-i18n="clear">晴</button><button type="button" data-wx="cloudy" data-i18n="cloudy">多雲</button><button type="button" data-wx="rain" data-i18n="rain">雨</button>
-    <label class="fov" data-i18n-title="hourTitle" title="一天中的時間"><span data-i18n="hour">時間</span> <input id="hour" type="range" min="0" max="23.99" step="0.05" value="7.5"> <output id="hourVal">07:30</output></label>
-    <button type="button" id="autoTime" data-i18n="autoTime" data-i18n-title="autoTimeTitle" title="時間自動流動（白天約 3.5 分鐘，夜晚較快）">自動</button>
+  <div class="wx" data-i18n-aria="wxAria" aria-label="Weather (decorative)">
+    <span class="wx-label" data-i18n="wx" data-i18n-title="wxTitle" title="Weather and time of day are visual effects, not data">Weather</span>
+    <button type="button" data-wx="clear" data-i18n="clear">Clear</button><button type="button" data-wx="cloudy" data-i18n="cloudy">Cloudy</button><button type="button" data-wx="rain" data-i18n="rain">Rain</button>
+    <label class="fov" data-i18n-title="hourTitle" title="Time of day"><span data-i18n="hour">Time</span> <input id="hour" type="range" min="0" max="23.99" step="0.05" value="7.5"> <output id="hourVal">07:30</output></label>
+    <button type="button" id="autoTime" data-i18n="autoTime" data-i18n-title="autoTimeTitle" title="Let time run (a day takes about 3.5 minutes; nights are faster)">Auto</button>
   </div>
   <div class="stat">
-    <div><span data-i18n="statArea">樹冠面積</span><b id="statArea">—</b></div>
-    <div><span data-i18n="statVs">相較</span> <span id="statBaseYear">1984</span><b id="statDelta">—</b></div>
-    <div><span data-i18n="statScenes">當年影像</span><b id="statScenes">—</b></div>
-    <div id="statBuiltBox" hidden><span data-i18n="statBuilt">建成區</span><b id="statBuilt">—</b></div>
+    <div><span data-i18n="statArea">Tree cover</span><b id="statArea">—</b></div>
+    <div><span data-i18n="statVs">vs</span> <span id="statBaseYear">1984</span><b id="statDelta">—</b></div>
+    <div><span data-i18n="statScenes">Scenes</span><b id="statScenes">—</b></div>
+    <div id="statBuiltBox" hidden><span data-i18n="statBuilt">Built-up</span><b id="statBuilt">—</b></div>
   </div>
   <div id="trendBox" hidden>
-    <svg id="trend" viewBox="0 0 300 46" preserveAspectRatio="none" role="img" data-i18n-aria="trendAria" aria-label="樹冠與建成區面積趨勢"></svg>
-    <div class="trend-legend"><span><i style="background:var(--forest)"></i><span data-i18n="trendTree">樹冠</span> <span id="trendTree"></span></span><span><i style="background:#8c8c86"></i><span data-i18n="trendBuilt">建成區</span> <span id="trendBuilt"></span></span></div>
+    <svg id="trend" viewBox="0 0 300 46" preserveAspectRatio="none" role="img" data-i18n-aria="trendAria" aria-label="Tree cover and built-up area trend"></svg>
+    <div class="trend-legend"><span><i style="background:var(--forest)"></i><span data-i18n="trendTree">Tree cover</span> <span id="trendTree"></span></span><span><i style="background:#8c8c86"></i><span data-i18n="trendBuilt">Built-up</span> <span id="trendBuilt"></span></span></div>
   </div>
   </div>
 </header>
@@ -201,7 +201,7 @@
 <div id="storyWait" class="panel" hidden></div>
 <div id="side">
 <aside class="panel" id="story" hidden aria-live="polite">
-  <h2><span id="storyTitle"></span><span class="h2-btns"><button type="button" class="fold" data-fold="story" data-default="open" data-persist="no" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><button class="close" id="storyClose" data-i18n-aria="close" aria-label="關閉">×</button></span></h2>
+  <h2><span id="storyTitle"></span><span class="h2-btns"><button type="button" class="fold" data-fold="story" data-default="open" data-persist="no" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><button class="close" id="storyClose" data-i18n-aria="close" aria-label="Close">×</button></span></h2>
   <div class="note fold-body" id="storyPlace"></div>
   <p id="storyCtx" class="fold-body"></p>
   <div id="storyNow"></div>
@@ -220,49 +220,49 @@
   <p class="note fold-body" id="storySrc"></p>
 </aside>
 <aside class="panel" id="info" hidden>
-  <h2><span data-i18n="info">這個位置</span><span class="h2-btns"><button type="button" class="fold" data-fold="info" data-default="open" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><button class="close" id="infoClose" data-i18n-aria="close" aria-label="關閉">×</button></span></h2>
+  <h2><span data-i18n="info">This place</span><span class="h2-btns"><button type="button" class="fold" data-fold="info" data-default="open" aria-expanded="true"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button><button class="close" id="infoClose" data-i18n-aria="close" aria-label="Close">×</button></span></h2>
   <div id="infoBody" class="fold-body"></div>
 </aside>
 </div>
 
-<section class="panel" id="timeline" data-i18n-aria="timeline" aria-label="時間軸">
+<section class="panel" id="timeline" data-i18n-aria="timeline" aria-label="Timeline">
   <div class="tl-row">
-    <button id="play" data-i18n-aria="play" aria-label="播放/暫停">❚❚</button>
+    <button id="play" data-i18n-aria="play" aria-label="Play/pause">❚❚</button>
     <div id="yearLabel">1984</div>
     <div class="tl-track">
-      <input id="slider" type="range" min="0" max="1" step="0.001" value="0" data-i18n-aria="slider" aria-label="年份">
-      <div id="bars" data-i18n-title="bars" title="每年可用的 Landsat 影像數（橘色：少於 5 景，低信心）"></div>
+      <input id="slider" type="range" min="0" max="1" step="0.001" value="0" data-i18n-aria="slider" aria-label="Year">
+      <div id="bars" data-i18n-title="bars" title="Landsat scenes per year (orange: fewer than 5, low confidence)"></div>
       <div id="ticks"></div>
     </div>
   </div>
   <div class="legend">
-    <span class="fold-body" data-i18n="legendFrac">樹冠比例</span><span class="fold-body">0%</span><span class="ramp fold-body"></span><span class="fold-body">100%</span>
-    <span class="fold-body"><i class="sw" style="background:#9a9a9a"></i><span data-i18n="legendNoObs">當年無清晰觀測（沿用前一次）</span></span>
-    <span class="fold-body"><i class="sw" style="background:var(--loss)"></i><span data-i18n="legendLoss">樹冠減少中</span></span>
-    <span style="margin-left:auto; display:flex; gap:6px; align-items:center"><label class="fov fold-body" data-i18n-title="fovTitle" title="視角（FOV）：小＝望遠、扁平的迷你感；大＝廣角、景深強"><span data-i18n="fov">視角</span> <input id="fov" type="range" min="15" max="75" step="1" value="34"> <output id="fovVal">34°</output></label><button id="tilt" type="button" data-i18n="tilt" data-i18n-title="tiltTitle" title="移軸模糊（M）">迷你世界</button><button id="randomBtn" type="button" data-i18n="random" data-i18n-title="randomTitle" title="飛到另一個樹冠有變化的隨機地點">隨機地點</button><button id="aboutBtn" type="button" data-i18n="about">資料與限制</button><button id="langBtn" type="button">EN</button><button type="button" class="fold" data-fold="timeline" data-default="folded" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></span>
+    <span class="fold-body" data-i18n="legendFrac">Tree cover</span><span class="fold-body">0%</span><span class="ramp fold-body"></span><span class="fold-body">100%</span>
+    <span class="fold-body"><i class="sw" style="background:#9a9a9a"></i><span data-i18n="legendNoObs">no clear observation this year (previous value kept)</span></span>
+    <span class="fold-body"><i class="sw" style="background:var(--loss)"></i><span data-i18n="legendLoss">tree cover falling</span></span>
+    <span style="margin-left:auto; display:flex; gap:6px; align-items:center"><label class="fov fold-body" data-i18n-title="fovTitle" title="Field of view: small = telephoto, flat, miniature look; large = wide angle, deep perspective"><span data-i18n="fov">View</span> <input id="fov" type="range" min="15" max="75" step="1" value="34"> <output id="fovVal">34°</output></label><button id="tilt" type="button" data-i18n="tilt" data-i18n-title="tiltTitle" title="Tilt-shift blur (M)">Miniature</button><button id="randomBtn" type="button" data-i18n="random" data-i18n-title="randomTitle" title="Fly to another random place where tree cover changed">Random place</button><button id="aboutBtn" type="button" data-i18n="about">Data &amp; limits</button><button id="langBtn" type="button">EN</button><button type="button" class="fold" data-fold="timeline" data-default="folded" aria-expanded="false"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button></span>
   </div>
 </section>
 
-<div id="cam" class="panel" role="group" data-i18n-aria="camAria" aria-label="鏡頭" data-i18n-title="camTitle" title="平移：拖曳地面；旋轉與傾斜：右鍵拖曳，或按住 Ctrl／⌘／Shift 拖曳（左右旋轉、上下傾斜）；縮放：滾輪或兩指捏合（朝游標處），雙擊放大；觸控：兩指轉動旋轉、兩指上下滑動傾斜">
-  <button id="rotL" type="button" data-i18n-aria="rotL" data-i18n-title="rotL" aria-label="向左旋轉" title="向左旋轉（Q）"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg></button>
-  <button id="compass" type="button" data-i18n-aria="compass" data-i18n-title="compass" aria-label="朝北" title="朝北（N）"><svg viewBox="0 0 24 24"><path d="M12 3l3.5 9h-7z" fill="#c0392b" stroke="#c0392b"/><path d="M12 21l3.5-9h-7z" fill="#b8b8b0" stroke="#b8b8b0"/></svg></button>
-  <button id="rotR" type="button" data-i18n-aria="rotR" data-i18n-title="rotR" aria-label="向右旋轉" title="向右旋轉（E）"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg></button>
-  <button id="tiltUp" type="button" data-i18n-aria="tiltUp" data-i18n-title="tiltUp" aria-label="俯視" title="俯視（R）"><svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg></button>
-  <button id="tiltDn" type="button" data-i18n-aria="tiltDn" data-i18n-title="tiltDn" aria-label="平視" title="平視（F）"><svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg></button>
+<div id="cam" class="panel" role="group" data-i18n-aria="camAria" aria-label="Camera" data-i18n-title="camTitle" title="Pan: drag the ground; rotate and tilt: right-drag, or hold Ctrl/⌘/Shift and drag (sideways rotates, up/down tilts); zoom: wheel or pinch (toward the pointer), double-click zooms in; touch: twist two fingers to rotate, slide two fingers up/down to tilt">
+  <button id="rotL" type="button" data-i18n-aria="rotL" data-i18n-title="rotL" aria-label="Rotate left (Q)" title="Rotate left (Q)"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 0 2.5-5.8"/><path d="M4 4v4h4"/></svg></button>
+  <button id="compass" type="button" data-i18n-aria="compass" data-i18n-title="compass" aria-label="North up (N)" title="North up (N)"><svg viewBox="0 0 24 24"><path d="M12 3l3.5 9h-7z" fill="#c0392b" stroke="#c0392b"/><path d="M12 21l3.5-9h-7z" fill="#b8b8b0" stroke="#b8b8b0"/></svg></button>
+  <button id="rotR" type="button" data-i18n-aria="rotR" data-i18n-title="rotR" aria-label="Rotate right (E)" title="Rotate right (E)"><svg viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.5-5.8"/><path d="M20 4v4h-4"/></svg></button>
+  <button id="tiltUp" type="button" data-i18n-aria="tiltUp" data-i18n-title="tiltUp" aria-label="Look down (R)" title="Look down (R)"><svg viewBox="0 0 24 24"><path d="M6 14l6-6 6 6"/></svg></button>
+  <button id="tiltDn" type="button" data-i18n-aria="tiltDn" data-i18n-title="tiltDn" aria-label="Look level (F)" title="Look level (F)"><svg viewBox="0 0 24 24"><path d="M6 10l6 6 6-6"/></svg></button>
 </div>
 
-<canvas id="minimap" class="panel" hidden data-i18n-title="minimap" data-i18n-aria="minimap" title="小地圖：點一下飛過去" aria-label="小地圖"></canvas>
+<canvas id="minimap" class="panel" hidden data-i18n-title="minimap" data-i18n-aria="minimap" title="Overview map: click to fly there" aria-label="Overview map: click to fly there"></canvas>
 
 <div class="panel" id="credits">
   Landsat: USGS · ESA WorldCover 2021 (CC BY 4.0) · Copernicus DEM · GISA (CC BY 4.0) · JRC GHSL<span id="creditsStory" hidden> · TSMC site outlines &amp; buildings ©
-  <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> (ODbL)</span> · <span data-i18n="search">地址搜尋 ©</span>
+  <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> (ODbL)</span> · <span data-i18n="search">address search ©</span>
   <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (Nominatim)
 </div>
 
-<div id="loading"><div><span data-i18n="loading">載入樹冠資料…</span><div class="bar"><i id="loadBar"></i></div><div id="loadMsg" class="note" style="margin-top:8px"></div></div></div>
+<div id="loading"><div><span data-i18n="loading">Loading tree-cover data…</span><div class="bar"><i id="loadBar"></i></div><div id="loadMsg" class="note" style="margin-top:8px"></div></div></div>
 
 <dialog id="about">
-  <div class="body" data-lang="zh">
+  <div class="body" data-lang="zh" lang="zh-Hant-TW" hidden>
     <h2>資料與限制</h2>
     <p>每個 30 公尺像元的樹冠比例，由 Landsat 4、5、7、8、9 衛星影像（USGS Collection 2 Level-2，Tier 1）逐年估計。畫面上的樹是示意：數量與樹冠比例成正比，不代表實際的單株樹木；樹種依海拔帶與都市環境隨機配置，樹葉由程式繪製；濃密森林的樹下另畫示意的林下灌木。鏡頭附近畫出細緻的立體樹，越遠越簡化；約 3 公里外只在每 2、4、8 個像元放一棵、樹冠相應加寬（覆蓋比例不變），因此立體樹可延伸到 6–14 公里，最外圈逐漸稀疏、融入地面的樹冠紋理與約 13 公尺的樹冠高度（同樣依樹冠比例）。電腦較慢時，遠處會更早開始稀疏（但樹冠在畫面上不會大於約 10 像素），並縮小範圍，以維持流暢。</p>
     <h3>怎麼算的</h3>
@@ -299,7 +299,7 @@
     </ul>
     <p class="note">資料檔（Apache Arrow）每個像元都帶有 UTM 座標與來源影像索引，可用 Python（polars、pyarrow、DuckDB）直接開啟。</p>
   </div>
-  <div class="body" data-lang="en" lang="en" hidden>
+  <div class="body" data-lang="en">
     <h2>Data &amp; limits</h2>
     <p>Tree cover (the share of each 30 m pixel covered by tree canopy) is estimated year by year from Landsat 4, 5, 7, 8 and 9 imagery (USGS Collection 2 Level-2, Tier 1). The trees on screen are illustrative: their number follows the tree cover, not real individual trees. Species are assigned at random by elevation band and urban setting, the foliage is drawn by code, and dense forest gets an illustrative shrub layer. Near the camera the 3D trees are detailed and they get simpler with distance. Beyond about 3 km only every 2nd, 4th or 8th pixel carries trees, with correspondingly wider crowns (the same cover), so 3D trees reach 6–14 km; the outermost band thins out into the canopy texture drawn on the ground with a canopy height of about 13 m (also following tree cover). On slower computers the thinning starts nearer (widened crowns never exceed about 10 screen pixels) and the range shrinks, to keep things smooth.</p>
     <h3>How it is computed</h3>
@@ -336,7 +336,7 @@
     </ul>
     <p class="note">The data files (Apache Arrow) carry the UTM coordinates and source scene index of every pixel and open directly in Python (polars, pyarrow, DuckDB).</p>
   </div>
-  <footer><button id="aboutClose" class="primary" data-i18n="close">關閉</button></footer>
+  <footer><button id="aboutClose" class="primary" data-i18n="close">Close</button></footer>
 </dialog>
 
 <script type="module" src="./js/app.js"></script>

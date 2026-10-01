@@ -93,27 +93,68 @@ export const levelName = (lv) => (lang === 'en' ? EN.lvl[lv] ?? lv : lv);
 // zh/en field of a data record: rec.zh / rec.en, or rec[`${base}_zh`] / rec[`${base}_en`]
 export const pickLang = (rec, base) => (base ? rec[`${base}_${lang}`] ?? rec[`${base}_zh`] : rec[lang] ?? rec.zh);
 
-// The page is written in Chinese; in English, elements carrying data-i18n* keys are replaced from DOM_EN.
-const DOM_EN = {
-  desc: '3D timeline of tree cover in Taiwan, 1984–2026, from Landsat satellite imagery.',
-  h1: 'Taiwan Tree-Cover Time Machine', pilot: 'Taipei pilot',
-  q: 'Address, landmark or coordinates, e.g. Taipei 101, 25.0339, 121.5645', qAria: 'Search for a place',
-  go: 'Go', gps: 'My location', gpsTitle: 'Use device location',
-  share: 'Share', shareTitle: 'Copy a link to this view (place, heading, year)',
-  wxAria: 'Weather (decorative)', wx: 'Weather', wxTitle: 'Weather and time of day are visual effects, not data',
-  clear: 'Clear', cloudy: 'Cloudy', rain: 'Rain', hour: 'Time', hourTitle: 'Time of day',
-  autoTime: 'Auto', autoTimeTitle: 'Let time run (a day takes about 3.5 minutes; nights are faster)',
-  statArea: 'Tree cover', statVs: 'vs', statScenes: 'Scenes', statBuilt: 'Built-up',
-  trendAria: 'Tree cover and built-up area trend', trendTree: 'Tree cover', trendBuilt: 'Built-up',
-  info: 'This place', close: 'Close', timeline: 'Timeline', play: 'Play/pause', slider: 'Year',
-  bars: 'Landsat scenes per year (orange: fewer than 5, low confidence)',
-  legendFrac: 'Tree cover', legendNoObs: 'no clear observation this year (previous value kept)', legendLoss: 'tree cover falling',
-  fov: 'View', fovTitle: 'Field of view: small = telephoto, flat, miniature look; large = wide angle, deep perspective',
-  tilt: 'Miniature', tiltTitle: 'Tilt-shift blur (M)', random: 'Random place', randomTitle: 'Fly to another random place where tree cover changed',
-  about: 'Data & limits', camAria: 'Camera',
-  camTitle: 'Pan: drag the ground; rotate and tilt: right-drag, or hold Ctrl/⌘/Shift and drag (sideways rotates, up/down tilts); zoom: wheel or pinch (toward the pointer), double-click zooms in; touch: twist two fingers to rotate, slide two fingers up/down to tilt',
-  rotL: 'Rotate left (Q)', compass: 'North up (N)', rotR: 'Rotate right (E)', tiltUp: 'Look down (R)', tiltDn: 'Look level (F)',
-  minimap: 'Overview map: click to fly there', search: 'address search ©', loading: 'Loading tree-cover data…',
+// index.html is written in English; Traditional Chinese (Taiwan) for its marked elements. A key prefixed with the
+// attribute (`data-i18n-title:rotL`) is used where one key's Chinese differs by attribute.
+const DOM_ZH = {
+  desc: "1984–2026 年臺灣樹冠覆蓋的 3D 時間軸，資料來自 Landsat 衛星。",
+  h1: "臺灣樹冠時光機",
+  pilot: "臺北試行版",
+  q: "地址、地標或座標，例：臺北101、25.0339, 121.5645",
+  qAria: "搜尋地點",
+  go: "前往",
+  gpsTitle: "使用裝置定位",
+  gps: "我的位置",
+  shareTitle: "複製目前視角（位置、方向、年份）的連結",
+  share: "分享",
+  wxAria: "天氣（裝飾用）",
+  wxTitle: "天氣與時間只是畫面效果，不是實際資料",
+  wx: "天氣",
+  clear: "晴",
+  cloudy: "多雲",
+  rain: "雨",
+  hourTitle: "一天中的時間",
+  hour: "時間",
+  autoTimeTitle: "時間自動流動（白天約 3.5 分鐘，夜晚較快）",
+  autoTime: "自動",
+  statArea: "樹冠面積",
+  statVs: "相較",
+  statScenes: "當年影像",
+  statBuilt: "建成區",
+  trendAria: "樹冠與建成區面積趨勢",
+  trendTree: "樹冠",
+  trendBuilt: "建成區",
+  close: "關閉",
+  info: "這個位置",
+  timeline: "時間軸",
+  play: "播放/暫停",
+  slider: "年份",
+  bars: "每年可用的 Landsat 影像數（橘色：少於 5 景，低信心）",
+  legendFrac: "樹冠比例",
+  legendNoObs: "當年無清晰觀測（沿用前一次）",
+  legendLoss: "樹冠減少中",
+  fovTitle: "視角（FOV）：小＝望遠、扁平的迷你感；大＝廣角、景深強",
+  fov: "視角",
+  tiltTitle: "移軸模糊（M）",
+  tilt: "迷你世界",
+  randomTitle: "飛到另一個樹冠有變化的隨機地點",
+  random: "隨機地點",
+  about: "資料與限制",
+  camTitle: "平移：拖曳地面；旋轉與傾斜：右鍵拖曳，或按住 Ctrl／⌘／Shift 拖曳（左右旋轉、上下傾斜）；縮放：滾輪或兩指捏合（朝游標處），雙擊放大；觸控：兩指轉動旋轉、兩指上下滑動傾斜",
+  camAria: "鏡頭",
+  rotL: "向左旋轉（Q）",
+  "data-i18n-aria:rotL": "向左旋轉",
+  compass: "朝北（N）",
+  "data-i18n-aria:compass": "朝北",
+  rotR: "向右旋轉（E）",
+  "data-i18n-aria:rotR": "向右旋轉",
+  tiltUp: "俯視（R）",
+  "data-i18n-aria:tiltUp": "俯視",
+  tiltDn: "平視（F）",
+  "data-i18n-aria:tiltDn": "平視",
+  minimap: "小地圖：點一下飛過去",
+  "data-i18n-aria:minimap": "小地圖",
+  search: "地址搜尋 ©",
+  loading: "載入樹冠資料…",
 };
 
 export function applyDom() {
@@ -122,8 +163,10 @@ export function applyDom() {
   for (const el of document.querySelectorAll('[data-lang]')) el.hidden = el.dataset.lang !== lang;
   const btn = document.getElementById('langBtn');
   if (btn) { btn.textContent = t('langBtn'); btn.title = t('langTitle'); btn.onclick = () => setLang(lang === 'en' ? 'zh' : 'en'); }
-  if (lang !== 'en') return;
-  const set = (attr, fn) => { for (const el of document.querySelectorAll(`[${attr}]`)) { const v = DOM_EN[el.getAttribute(attr)]; if (v != null) fn(el, v); } };
+  if (lang !== 'zh') return;
+  const set = (attr, fn) => {
+    for (const el of document.querySelectorAll(`[${attr}]`)) { const k = el.getAttribute(attr), v = DOM_ZH[`${attr}:${k}`] ?? DOM_ZH[k]; if (v != null) fn(el, v); }
+  };
   set('data-i18n', (el, v) => { el.textContent = v; });
   set('data-i18n-title', (el, v) => { el.title = v; });
   set('data-i18n-ph', (el, v) => { el.placeholder = v; });

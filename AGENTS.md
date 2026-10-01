@@ -292,8 +292,10 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   only its site office.
 - **Languages (2026-10-01):** Traditional Chinese and English (`js/i18n.js`). Order: `?lang=zh|en`, then the choice
   saved by the 中文/EN button (localStorage `tpetree.lang`; switching reloads), then `navigator.languages` (zh-* → zh,
-  en-* → en), else English. `index.html` is written in Chinese; elements with `data-i18n`, `-title`, `-ph`, `-aria`,
-  `-content` keys are replaced in English, and the about dialog has a full `data-lang="en"` copy. Share and story links
+  en-* → en), else English. `index.html` is written in English (`lang="en"`, so crawlers that don't run JS
+  read English); elements with `data-i18n`, `-title`, `-ph`, `-aria`, `-content` keys get Traditional Chinese (Taiwan)
+  from `DOM_ZH` in `i18n.js` when the language is zh, and the about dialog has a full `data-lang="zh"` copy (hidden by
+  default). Social previews, share pages and og/twitter tags are English only. Share and story links
   never carry `lang`. Nominatim gets `accept-language=en,zh-TW` in English.
 - **Rendering cost (2026-10-01):** the slow low oblique view was not the shadow map (that measurement was GPU noise
   from another tab). Measured with WebGL timer queries (`EXT_disjoint_timer_query_webgl2`) at 1280×720 on the M2 Pro:
