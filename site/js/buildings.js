@@ -86,8 +86,9 @@ export class City {
     this.mesh = mesh; this.cap = cap;
   }
 
-  // Rebuild for built-up pixels within `radius` of `focus` (loaded full-resolution tiles only).
-  build(ds, frame, focus, radius) {
+  // Rebuild for built-up pixels within `radius` of `focus` (loaded full-resolution tiles only), except where
+  // `skip(x, z)` (world) says real footprints are drawn instead.
+  build(ds, frame, focus, radius, skip = null) {
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), up = new THREE.Vector3(0, 1, 0), p = new THREE.Vector3(), sc = new THREE.Vector3();
     const M = [], Y = [], S = [], T = [], D = [];
     const r2 = radius * radius;
@@ -101,7 +102,7 @@ export class City {
         if (!b || share < 6 || (tile.own && !tile.own[k]) || (tile.land && !tile.land[k])) continue;
         const [wx, , wz] = toWorld(frame, tile.zone, tile.x[k], tile.y[k], 0);
         const dx = wx - focus.x, dz = wz - focus.z;
-        if (dx * dx + dz * dz > r2) continue;
+        if (dx * dx + dz * dz > r2 || skip?.(wx, wz)) continue;
         const X = tile.x[k], Yu = tile.y[k], rand = rng(X * 92837111 ^ Yu * 689287499);
         const n = share < 22 ? 1 : share < 50 ? 2 : 3;
         const area = (share / 100) * res * res / n;

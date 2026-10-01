@@ -519,7 +519,7 @@ function updateTrees() {
     forest.build(ds, frame, lastFocus, radius, years, lastCam, dir, steep ? Math.PI : hfov + 0.55, NEAR_DIST * Math.min(1, treeQ * treeQ), shadowHalf(dist) * 1.35, THIN_DIST * treeQ,
       2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2) / innerHeight);
     uniforms.uTreeFocus.value.copy(lastFocus); uniforms.uTreeR.value = radius * 0.9;   // canopy lift starts as trees thin
-    city.build(ds, frame, lastFocus, THREE.MathUtils.clamp(dist * 0.75, 700, 2400) * 1.3);
+    city.build(ds, frame, lastFocus, THREE.MathUtils.clamp(dist * 0.75, 700, 2400) * 1.3, (x, z) => story.excludes(x, z));
     const k = Math.min(Math.floor(yearPos), years.length - 2);
     forest.setYears(years[k], years[k + 1]);
   }
@@ -715,6 +715,7 @@ function viewLonLat(lon, lat, dist, elevDeg, azDeg) {
 
 const story = new Story({
   scene, years: () => years, ground: groundLonLat, status, tilesVersion: () => ds.tiles.size, layout: applyViewOffset,
+  refreshCity: () => { lastFocus = null; },
   setYear: (i, play) => { setYearPos(i); playing = play; updatePlayButton(); },
   view: (lon, lat, d, el, az, animate) => {
     pin.visible = false; marker.visible = false; $('info').hidden = true; selected = null;
@@ -846,6 +847,7 @@ function step(dt, now = performance.now()) {
   if (Math.floor(now / 100) !== Math.floor((now - dt * 1000) / 100)) drawMinimap();
   if (weather.auto && Math.floor(now / 250) !== Math.floor((now - dt * 1000) / 250)) { $('hour').value = weather.hour; $('hourVal').textContent = weather.label; }
   pin.scale.setScalar(Math.max(1, camera.position.distanceTo(pin.position) / 2500));
+  story.tick(camera, uniforms.uYearF.value);
 }
 
 // Testing hook: step without requestAnimationFrame (headless screenshots).

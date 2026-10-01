@@ -1,6 +1,9 @@
 // Site stories (?story=<collection>-<site>, or ?story=<collection> for its first site): fly to a site, outline it on
 // the ground, play the timeline through the years its tree cover fell, and show the measured series inside the
 // outline and in a ring around it (precomputed in stories/<collection>.json by pipeline/analysis/build_stories.py).
+// The site's real buildings (OSM footprints, pipeline/analysis/site_buildings.py) are extruded and rise in the year they
+// appear; buildings still under construction are translucent shells. Illustrative buildings inside the outline are
+// left out while a story is open (`excludes`).
 import * as THREE from 'three';
 import { Line2 } from 'three/addons/lines/Line2.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
@@ -13,9 +16,14 @@ const HOLD_OPEN = 3000, HOLD_REPLAY = 1200;   // ms on the first year before pla
 
 export class Story {
   // app: { scene, years(), ground(lon, lat) -> world [x, y, z], view(lon, lat, d, el, az, animate), setYear(i, play),
-  //        status(msg, warn), tilesVersion(), layout() (story mode toggled) }
+  //        status(msg, warn), tilesVersion(), layout() (story mode toggled), refreshCity() }
   constructor(app) {
-    this.app = app; this.data = null; this.cur = null; this.line = null; this.drapedAt = -1;
+    this.app = app; this.data = null; this.cur = null; this.line = null; this.drapedAt = -1; this.blds = []; this.ring = null;
+    this.fabMat = new THREE.MeshLambertMaterial({ color: 0xd3d8db });
+    this.shellMat = new THREE.MeshLambertMaterial({ color: 0xe0a46a, transparent: true, opacity: 0.38, depthWrite: false });
+    this.edgeMat = new THREE.LineBasicMaterial({ color: 0x34424a, transparent: true, opacity: 0.85 });
+    this.shellEdge = new THREE.LineBasicMaterial({ color: 0xb4632a, transparent: true, opacity: 0.85 });
+    this.labels = document.createElement('div'); this.labels.id = 'storyLabels'; document.body.appendChild(this.labels);
     this.mat = new LineMaterial({ color: 0xd9480f, linewidth: 3, depthTest: false, transparent: true, opacity: 0.95 });
     this.mat.resolution.set(innerWidth, innerHeight);
     addEventListener('resize', () => this.mat.resolution.set(innerWidth, innerHeight));
@@ -49,7 +57,10 @@ export class Story {
     this.slow = [this.idx(s.change[0] - 2), this.idx(s.change[1] + 1)];
     document.body.classList.add('story-mode');
     this.app.view(s.lon, s.lat, s.d, s.el, s.az, animate);
+    this.ring = s.polygon.map(([lo, la]) => { const [x, , z] = this.app.ground(lo, la); return [x, z]; });
     this.outline(true);
+    this.buildings(true);
+    this.app.refreshCity();
     this.render();
     $('story').hidden = false; $('creditsStory').hidden = false;
     $('storyPick').value = s.id;
@@ -62,7 +73,8 @@ export class Story {
   }
 
   close() {
-    this.cur = null; $('story').hidden = true; $('creditsStory').hidden = true;
+    this.cur = null; this.ring = null; $('story').hidden = true; $('creditsStory').hidden = true;
+    this.clearBuildings(); this.app.refreshCity();
     document.body.classList.remove('story-mode'); this.app.layout();
     if (this.line) { this.app.scene.remove(this.line); this.line.geometry.dispose(); this.line = null; }
     const u = new URL(location.href); u.searchParams.delete('story'); history.replaceState(null, '', u);
@@ -86,10 +98,71 @@ export class Story {
     return yearPos >= this.slow[0] && yearPos < this.slow[1] ? SLOW : FAST;
   }
 
+  // Inside the open story's outline (world x/z)? Illustrative buildings are skipped there when it has real ones.
+  excludes(x, z) {
+    const r = this.ring;
+    if (!r || !this.cur.buildings?.length) return false;
+    let inside = false;
+    for (let i = 0, j = r.length - 1; i < r.length; j = i++) {
+      if ((r[i][1] > z) !== (r[j][1] > z) && x < (r[j][0] - r[i][0]) * (z - r[i][1]) / (r[j][1] - r[i][1]) + r[i][0]) inside = !inside;
+    }
+    return inside;
+  }
+
+  clearBuildings() {
+    for (const b of this.blds) { this.app.scene.remove(b.mesh); b.mesh.geometry.dispose(); b.edges.geometry.dispose(); b.label?.remove(); }
+    this.blds = [];
+  }
+
+  // Footprints extruded from just under the lowest ground at their corners to `h` above the highest (fab pads are
+  // levelled; heights are real metres, the terrain is exaggerated). Rebuilt with the outline as detail tiles arrive.
+  buildings(force = false) {
+    this.clearBuildings();
+    const list = this.cur.buildings ?? [];
+    const labelled = new Set(list.filter(b => b.name && b.area >= 6000).slice(0, 10).map(b => b.id));
+    for (const b of list) {
+      let ring = b.poly;
+      if (ring.length > 1 && ring[0][0] === ring.at(-1)[0] && ring[0][1] === ring.at(-1)[1]) ring = ring.slice(0, -1);
+      const pts = ring.map(([lo, la]) => this.app.ground(lo, la));
+      const ys = pts.map(p => p[1]), base = Math.min(...ys) - 2, top = Math.max(...ys) + b.h;
+      const shape = new THREE.Shape(pts.map(([x, , z]) => new THREE.Vector2(x, -z)));
+      const geo = new THREE.ExtrudeGeometry(shape, { depth: top - base, bevelEnabled: false }).rotateX(-Math.PI / 2);
+      const mesh = new THREE.Mesh(geo, b.construction ? this.shellMat : this.fabMat);
+      const edges = new THREE.LineSegments(new THREE.EdgesGeometry(geo, 30), b.construction ? this.shellEdge : this.edgeMat);
+      mesh.add(edges); mesh.position.y = base; mesh.castShadow = !b.construction; mesh.receiveShadow = true;
+      mesh.visible = false; mesh.renderOrder = b.construction ? 3 : 0;
+      this.app.scene.add(mesh);
+      let label = null;
+      if (labelled.has(b.id)) {
+        label = document.createElement('div'); label.className = 'blabel' + (b.construction ? ' building' : '');
+        label.textContent = b.name.replace(/^台積電\s*|^TSMC\s*/i, '') + (b.construction ? ` · ${t('sUnderConstruction')}` : '');
+        this.labels.appendChild(label);
+      }
+      const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length, cz = pts.reduce((a, p) => a + p[2], 0) / pts.length;
+      this.blds.push({ b, mesh, edges, label, top: new THREE.Vector3(cx, top + 6, cz) });
+    }
+  }
+
+  // Every frame: grow buildings with the (continuous) year and place labels.
+  tick(camera, yearF) {
+    if (!this.cur || !this.blds.length) return;
+    const v = new THREE.Vector3(), w = innerWidth, h = innerHeight;
+    for (const o of this.blds) {
+      const g = THREE.MathUtils.smoothstep(yearF, o.b.year - 0.8, o.b.year + 0.2);
+      o.mesh.visible = g > 0.001; o.mesh.scale.y = Math.max(g, 0.001);
+      if (!o.label) continue;
+      v.copy(o.top); v.y = o.mesh.position.y + (o.top.y - o.mesh.position.y) * g; v.project(camera);
+      const show = g > 0.6 && v.z < 1 && Math.abs(v.x) < 1.05 && Math.abs(v.y) < 1.05;
+      o.label.hidden = !show;
+      if (show) o.label.style.transform = `translate(${((v.x + 1) / 2 * w).toFixed(0)}px, ${((1 - v.y) / 2 * h).toFixed(0)}px) translate(-50%, -100%)`;
+    }
+  }
+
   // Outline draped on the terrain, densified every ~25 m; redrawn when more detailed tiles arrive.
   outline(force = false) {
     const v = this.app.tilesVersion();
     if (!this.cur || (!force && v === this.drapedAt)) return;
+    if (!force) this.buildings();
     this.drapedAt = v;
     const poly = this.cur.polygon, pts = [];
     for (let i = 0; i < poly.length - 1; i++) {

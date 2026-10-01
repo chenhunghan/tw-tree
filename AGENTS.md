@@ -245,6 +245,17 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   Zhunan 41 → 21 % (2020–22), Fab 14 Tainan 37 → 20 % (1998, the ring fell too); AP7 Chiayi was farmland (crops read as
   partial cover) and Fab 22 a refinery (16 → 8 %). On phones, story mode hides the header's weather/stats rows, the legend
   and camera buttons, pulls the camera back 1.6× and shifts the image up (`setViewOffset`) above the card.
+- **Fab buildings in stories (2026-10-01):** `pipeline/analysis/site_buildings.py` adds each story's OSM building
+  footprints (Overpass query in `pipeline/analysis/tsmc_buildings_overpass.txt`) to `site/stories/tsmc.json`: centroid
+  inside the outline (+40 m), ≥ 400 m², not residential/religious, named ones only if fab-like (P1, CUP, 廠 …),
+  duplicates (> 50 % overlap with a larger kept one) dropped. Height: OSM `height`, else levels × 7.6 m, else 30 m for
+  fab-sized factory/industrial (> 15,000 m²), 25 m office, 20 m other (`h_src`). Year: OSM `start_date`, else the GISA
+  first-built median under the footprint (moved to the decline start if the footprint was > 30 % treed before it), else
+  the decline end (post-2021); groundbreaking floors Fab 18 2018, Fab 20 2023, Fab 22 2023 (`year_src`). The app
+  extrudes them (real metres on the exaggerated terrain: base under the lowest corner, roof `h` above the highest),
+  grows them with `uYearF`, draws OSM `construction` ones as translucent shells, labels the 10 largest named ones, and
+  `City.build` skips illustrative buildings inside the open story's outline. AP7 has no footprints in OSM yet; Fab 25
+  only its site office.
 - **Languages (2026-10-01):** Traditional Chinese and English (`js/i18n.js`). Order: `?lang=zh|en`, then the choice
   saved by the 中文/EN button (localStorage `tpetree.lang`; switching reloads), then `navigator.languages` (zh-* → zh,
   en-* → en), else English. `index.html` is written in Chinese; elements with `data-i18n`, `-title`, `-ph`, `-aria`,

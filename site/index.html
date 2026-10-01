@@ -77,6 +77,10 @@
   #storyNow .phase { margin-left: auto; padding: 2px 8px; border-radius: 9px; background: #e6efe2; color: var(--accent); font-size: 12px; }
   #storyNow .phase.change { background: #f6e3d3; color: var(--loss); }
   #storyChart { width: 100%; height: 92px; display: block; margin-top: 6px; }
+  #storyLabels { position: fixed; inset: 0; pointer-events: none; z-index: 1; }
+  .blabel { position: absolute; left: 0; top: 0; padding: 2px 7px; border-radius: 7px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+    background: rgba(250, 250, 245, 0.9); color: var(--ink); border: 1px solid var(--line); box-shadow: 0 2px 8px rgba(20, 40, 30, 0.15); }
+  .blabel.building { color: var(--loss); }
   .story-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
   .story-actions select { font: inherit; font-size: 13px; padding: 6px 8px; border-radius: 9px; border: 1px solid var(--line); background: #fff; min-width: 0; flex: 1; }
   #info h2 { font-size: 14px; margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; }
@@ -200,7 +204,7 @@
 <canvas id="minimap" class="panel" hidden data-i18n-title="minimap" data-i18n-aria="minimap" title="小地圖：點一下飛過去" aria-label="小地圖"></canvas>
 
 <div class="panel" id="credits">
-  Landsat: USGS · ESA WorldCover 2021 (CC BY 4.0) · Copernicus DEM · GISA (CC BY 4.0) · JRC GHSL<span id="creditsStory" hidden> · TSMC site outlines ©
+  Landsat: USGS · ESA WorldCover 2021 (CC BY 4.0) · Copernicus DEM · GISA (CC BY 4.0) · JRC GHSL<span id="creditsStory" hidden> · TSMC site outlines &amp; buildings ©
   <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> (ODbL)</span> · <span data-i18n="search">地址搜尋 ©</span>
   <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (Nominatim)
 </div>
@@ -232,7 +236,7 @@
       <li>天氣、雲、風、雨與日夜只是畫面效果，不是實際氣象資料；雲影也不影響樹冠數值。</li>
       <li><b>建築物是示意：</b>某像元在 GISA 資料中第一次成為不透水面（建成）的那一年，建築才會長出來；數量依 GHSL 2018 的建成面積比例，高度依 GHSL 2018 的建物高度，位置與形狀是程式產生的，不是真實建物輪廓。GISA 只記錄「第一次建成」，所以拆除、改建或都市綠化不會顯示；2021 年以後新建的也還沒有。夜間燈光同樣只是示意。</li>
       <li>地址搜尋使用 OpenStreetMap 的 Nominatim；臺灣門牌資料不完整，找不到時會逐步退到巷弄、路段或行政區，並顯示達到的精度。</li>
-      <li><b>廠區故事</b>（含 <code>?story=</code> 的連結）是把同一套樹冠比例，平均到 OpenStreetMap 的廠區範圍與其周邊環帶；文中的興建日期來自所列的新聞與公司資料。</li>
+      <li><b>廠區故事</b>（含 <code>?story=</code> 的連結）是把同一套樹冠比例，平均到 OpenStreetMap 的廠區範圍與其周邊環帶；文中的興建日期來自所列的新聞與公司資料。廠房是 OpenStreetMap 的實際建物輪廓（不是示意），高度多為估計，出現的年份依 GISA 第一次建成的年份，或廠區樹冠消失的年份推估；半透明的是 OpenStreetMap 標示為興建中的建物。開啟故事時，廠區內不畫示意建築。</li>
     </ul>
     <h3>來源</h3>
     <ul>
@@ -269,7 +273,7 @@
       <li>Weather, clouds, wind, rain and day/night are visual effects only, not weather data; cloud shadows do not affect tree-cover values.</li>
       <li><b>Buildings are illustrative:</b> buildings rise in the year a pixel first becomes impervious (built) in the GISA data. Their number follows the GHSL 2018 built-up share and their height the GHSL 2018 building height; positions and shapes are generated, not real footprints. GISA records only first construction, so demolition, rebuilding and urban greening are not shown, and buildings after 2021 are not there yet. Night lights are illustrative too.</li>
       <li>Address search uses OpenStreetMap's Nominatim. House numbers in Taiwan are incomplete, so when one is not found the search falls back to the lane, road section or district and says how precise the result is.</li>
-      <li><b>Site stories</b> (links with <code>?story=</code>) average the same tree-cover values over a site outline from OpenStreetMap and over a ring around it; construction dates in the text come from the cited news and company sources.</li>
+      <li><b>Site stories</b> (links with <code>?story=</code>) average the same tree-cover values over a site outline from OpenStreetMap and over a ring around it; construction dates in the text come from the cited news and company sources. Fab buildings are real OpenStreetMap footprints (not illustrative); heights are mostly estimates, and the year each appears comes from GISA's first-built year or the year the site's tree cover went. Translucent ones are tagged as under construction in OpenStreetMap. While a story is open, no illustrative buildings are drawn inside the site.</li>
     </ul>
     <h3>Sources</h3>
     <ul>
