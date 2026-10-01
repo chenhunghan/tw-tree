@@ -11,12 +11,15 @@ import { LineGeometry } from 'three/addons/lines/LineGeometry.js';
 import { t, pickLang, lang } from './i18n.js';
 
 const $ = (id) => document.getElementById(id);
-const SLOW = 0.45, FAST = 2.6;                 // years per second inside / outside the change window
-const HOLD_OPEN = 3000, HOLD_REPLAY = 1200;   // ms on the first year before playing (read the card, let tiles arrive)
+const SLOW = 0.5, MID = 1.2;                   // years per second: through the clearing and around each building's year / else
+const LEAD = 3;                                // playback starts this many years before the clearing
+const HOLD_OPEN = 1500, HOLD_REPLAY = 1000;   // ms on the first year once the site is ready (read the card)
 
 export class Story {
   // app: { scene, years(), ground(lon, lat) -> world [x, y, z], view(lon, lat, d, el, az, animate), setYear(i, play),
-  //        status(msg, warn), tilesVersion(), layout() (story mode toggled), refreshCity() }
+  //        status(msg, warn), tilesVersion(), layout() (story mode toggled), refreshCity(),
+  //        siteProgress([lon0, lat0, lon1, lat1]) -> { done, total, trees } (detail tiles around the site, trees built),
+  //        viewState() -> { lat, lon, d, az, el, year } }
   constructor(app) {
     this.app = app; this.data = null; this.cur = null; this.line = null; this.drapedAt = -1; this.blds = []; this.ring = null;
     this.fabMat = new THREE.MeshLambertMaterial({ color: 0xd3d8db });
@@ -47,16 +50,21 @@ export class Story {
   }
 
   // Open a story by id (animate: fly there from the current view). Returns false if it does not exist.
-  open(id, animate = false) {
+  // `opts` (from the link) may set the view centre (lat, lon), distance d, heading az, elevation el and start year `from`.
+  open(id, animate = false, opts = {}) {
     const s = this.data?.stories.find(x => x.id === id) ?? (id === this.coll ? this.data?.stories[0] : null);
     if (!s) { this.app.status(t('sNotFound', id), true); return false; }
     this.cur = s;
     const yrs = this.app.years();
     this.idx = (y) => { let i = yrs.findIndex(v => v >= y); return i < 0 ? yrs.length - 1 : i; };
-    this.from = this.idx(Math.max(yrs[0], s.change[0] - 6));
-    this.slow = [this.idx(s.change[0] - 2), this.idx(s.change[1] + 1)];
+    this.from = this.idx(Number.isFinite(opts.from) ? opts.from : Math.max(yrs[0], s.change[0] - LEAD));
+    // slow through the clearing and for a year around each building's appearance (index positions on the timeline)
+    this.slow = [[this.idx(s.change[0] - 1) - 0.5, this.idx(s.change[1] + 1)],
+      ...[...new Set((s.buildings ?? []).map(b => b.year))].map(y => [this.idx(y) - 1, this.idx(y) + 0.3])];
     document.body.classList.add('story-mode');
-    this.app.view(s.lon, s.lat, s.d, s.el, s.az, animate);
+    this.app.view(opts.lon ?? s.lon, opts.lat ?? s.lat, opts.d ?? s.d, opts.el ?? s.el, opts.az ?? s.az, animate);
+    const xs = s.polygon.map(p => p[0]), ys = s.polygon.map(p => p[1]), pad = 0.012;   // ~1.3 km around the site
+    this.area = [Math.min(...xs) - pad, Math.min(...ys) - pad, Math.max(...xs) + pad, Math.max(...ys) + pad];
     this.ring = s.polygon.map(([lo, la]) => { const [x, , z] = this.app.ground(lo, la); return [x, z]; });
     this.outline(true);
     this.buildings(true);
@@ -65,16 +73,16 @@ export class Story {
     $('story').hidden = false; $('creditsStory').hidden = false;
     $('story').classList.remove('folded'); $('story').querySelector('button.fold')?.setAttribute('aria-expanded', 'true');
     $('storyPick').value = s.id;
-    const u = new URL(location.href);
-    for (const k of ['at', 'd', 'az', 'el', 'y']) u.searchParams.delete(k);
+    const u = new URL(location.href);                       // a link's own view stays in the address bar until a switch
+    if (animate) for (const k of ['at', 'd', 'az', 'el', 'y', 'from']) u.searchParams.delete(k);
     u.searchParams.set('story', s.id);
     history.replaceState(null, '', u);
-    this.replay(HOLD_OPEN);
+    this.waitForSite();
     return true;
   }
 
   close() {
-    this.cur = null; this.ring = null; $('story').hidden = true; $('creditsStory').hidden = true;
+    this.cur = null; this.ring = null; this.waiting = 0; $('storyWait').hidden = true; $('story').hidden = true; $('creditsStory').hidden = true;
     this.clearBuildings(); this.app.refreshCity();
     document.body.classList.remove('story-mode'); this.app.layout();
     if (this.line) { this.app.scene.remove(this.line); this.line.geometry.dispose(); this.line = null; }
@@ -83,20 +91,45 @@ export class Story {
 
   replay(hold = HOLD_REPLAY) { this.holdUntil = performance.now() + hold; this.app.setYear(this.from, true); }
 
+  // Hold on the start year with a progress pill until the site's detail tiles are loaded and trees are built on them.
+  waitForSite() {
+    this.waiting = performance.now(); this.readyAt = 0;
+    this.app.setYear(this.from, true);
+    $('storyWait').hidden = false;
+  }
+  #checkWait() {
+    const p = this.app.siteProgress(this.area), el = $('storyWait');
+    el.textContent = t('sLoading', p.done, p.total);
+    if (p.done >= p.total && p.trees && !this.readyAt) this.readyAt = performance.now();
+    // ready (plus a moment so the first frames with the new trees are drawn), or give up after 25 s
+    if ((this.readyAt && performance.now() - this.readyAt > 400) || performance.now() - this.waiting > 25000) {
+      this.waiting = 0; this.readyAt = 0; el.hidden = true;
+      this.replay(HOLD_OPEN);
+    }
+  }
+
   async share() {
     const u = new URL(location.origin + location.pathname);
     const data = new URLSearchParams(location.search).get('data');
     if (data) u.searchParams.set('data', data);
     u.searchParams.set('story', this.cur.id);
-    const url = u.toString();
+    // the current view (centre if moved, distance, heading, tilt) and, before the end of the clearing, the start year
+    const v = this.app.viewState(), s = this.cur;
+    if (Math.hypot((v.lon - s.lon) * 101000, (v.lat - s.lat) * 111000) > 60) u.searchParams.set('at', `${v.lat.toFixed(5)},${v.lon.toFixed(5)}`);
+    u.searchParams.set('d', String(Math.round(v.d)));
+    u.searchParams.set('az', String(Math.round(v.az)));
+    u.searchParams.set('el', String(Math.round(v.el)));
+    if (v.year <= s.change[1]) u.searchParams.set('from', String(v.year));
+    const url = u.toString().replace('%2C', ',');
     try { await navigator.clipboard.writeText(url); this.app.status(t('sCopied')); }
     catch { this.app.status(t('linkIs', url)); }
   }
 
   get active() { return !!this.cur; }
   speed(yearPos) {
+    if (this.waiting) { this.#checkWait(); return 0; }
     if (performance.now() < this.holdUntil) return 0;
-    return yearPos >= this.slow[0] && yearPos < this.slow[1] ? SLOW : FAST;
+    return this.slow.some(([a, b]) => yearPos >= a && yearPos < b) ? SLOW : MID;
   }
 
   // Inside the open story's outline (world x/z)? Illustrative buildings are skipped there when it has real ones.

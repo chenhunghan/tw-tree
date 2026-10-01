@@ -41,7 +41,7 @@ const ZH = {
   sReplay: '重播', sOther: '其他台積電廠區', sClose: '關閉', sShare: '分享這個故事',
   sNote: '數值為 30 公尺 Landsat 像元的樹冠比例估計，單一年份可能有數個百分點的雜訊。廠房為 OpenStreetMap 的實際輪廓；高度多為估計（約 20–33 公尺），出現年份依 GISA 建成年份或樹冠消失的年份推估，半透明為興建中。廠區範圍與廠房 © OpenStreetMap 貢獻者（ODbL）。',
   sSources: '時間資料來源', sChartAria: '廠區與周邊的樹冠比例', sCopied: '已複製故事連結。',
-  sNotFound: (id) => `找不到故事「${id}」。`, sLegendChange: '開發期間', sUnderConstruction: '興建中',
+  sNotFound: (id) => `找不到故事「${id}」。`, sLegendChange: '開發期間', sUnderConstruction: '興建中', sLoading: (d, n) => `載入廠區細節… ${d}/${n} 圖塊`,
   langBtn: 'EN', langTitle: 'Switch to English',
   expand: '展開', collapse: '收合',
 };
@@ -73,7 +73,7 @@ const EN = {
   sReplay: 'Replay', sOther: 'Other TSMC sites', sClose: 'Close', sShare: 'Share this story',
   sNote: 'Values are estimated tree cover of 30 m Landsat pixels; single years can be off by a few points. Fab buildings are real OpenStreetMap footprints; heights are mostly estimates (about 20–33 m), and the year each appears comes from GISA\'s first-built year or the year the tree cover went; translucent ones are under construction. Site outline and buildings © OpenStreetMap contributors (ODbL).',
   sSources: 'Sources for dates', sChartAria: 'Tree cover inside the site and around it', sCopied: 'Story link copied.',
-  sNotFound: (id) => `No story called “${id}”.`, sLegendChange: 'clearing years', sUnderConstruction: 'under construction',
+  sNotFound: (id) => `No story called “${id}”.`, sLegendChange: 'clearing years', sUnderConstruction: 'under construction', sLoading: (d, n) => `Loading site detail… ${d}/${n} tiles`,
   langBtn: '中文', langTitle: '切換為中文',
   expand: 'Expand', collapse: 'Collapse',
   lvl: { '完整地址': 'full address', '門牌': 'house number', '巷弄': 'lane', '路段': 'road section', '道路': 'road', '鄉鎮市區': 'district' },

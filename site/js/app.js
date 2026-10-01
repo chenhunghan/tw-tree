@@ -206,7 +206,8 @@ async function load() {
   // a random place where tree cover changed; then autoplay
   const storyId = Story.requested(params);
   if (storyId) await story.load(storyId).catch((err) => console.error(err));
-  const storyOk = !!(storyId && story.open(storyId));     // places the camera and starts the story's playback
+  const sv = sharedView(true) ?? {};                        // a story link may carry its own view and start year
+  const storyOk = !!(storyId && story.open(storyId, false, sv));
   const shared = storyOk ? null : sharedView();
   const start = storyOk || shared ? null : pickStart();
   if (shared) openShared(shared);
@@ -306,7 +307,7 @@ function streamTiles(now) {
     ds.loadTile(e).then((tile) => {
       prepareFilled(tile, years);
       addDetail(tile); refreshNeighbours(tile);
-      treesStale = true;                         // trees can now be placed here (rebuilt at most once a second)
+      treesStale = true; lastTileAt = performance.now();   // trees can now be placed here (rebuilt at most once a second)
       pending.get(k)?.(); pending.delete(k);
     }).catch((err) => console.warn(err)).finally(() => loading.delete(k));
   }
@@ -523,7 +524,7 @@ addEventListener('keydown', (e) => {
 // treeQ holds the frame rate: it shrinks when frames are slow (thinning starts nearer, near detail and the radius
 // shrink) and grows back when there is room.
 let lastFocus = null, lastRadius = 0, lastCam = null, lastMove = 0, shadowSize = 0, lastHeading = 0;
-let treesStale = false, lastBuild = 0;
+let treesStale = false, lastBuild = 0, lastTileAt = 0;
 let treeQ = +(params.get('trees') || 1), frameEma = 1 / 60, lastQ = 0;
 const fixedQ = params.has('trees');
 const THIN_DIST = 3000;
@@ -731,10 +732,12 @@ $('gps').onclick = () => {
 
 // ---------- share: ?at=lat,lon&d=<m>&az=<deg>&el=<deg>&y=<year> ----------
 // `at` is the selected pixel (or the view centre); the camera distance, heading and tilt and the shown year are kept.
-function sharedView() {
+// story: whichever of at, d, az, el, from a story link has (missing ones fall back to the story's own); else `at` is needed.
+function sharedView(story = false) {
   const c = params.get('at') && parseCoords(params.get('at'));
-  if (!c) return null;
   const num = (k, lo, hi, def) => { const v = parseFloat(params.get(k)); return Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : def; };
+  if (story) return { lon: c?.[0], lat: c?.[1], d: num('d', 30, 400000), az: num('az', -360, 360), el: num('el', 2, 89), from: parseInt(params.get('from'), 10) };
+  if (!c) return null;
   return { lon: c[0], lat: c[1], d: num('d', 30, 400000, 1700), az: num('az', -360, 360, 200), el: num('el', 2, 89, 33), year: parseInt(params.get('y'), 10) };
 }
 function groundLonLat(lon, lat) {
@@ -756,6 +759,17 @@ function viewLonLat(lon, lat, dist, elevDeg, azDeg) {
 const story = new Story({
   scene, years: () => years, ground: groundLonLat, status, tilesVersion: () => ds.tiles.size, layout: applyViewOffset,
   refreshCity: () => { lastFocus = null; },
+  siteProgress: ([lon0, lat0, lon1, lat1]) => {        // detail tiles over the area, and trees built since the last arrived
+    let done = 0, total = 0;
+    for (const e of ds.entries.values()) {
+      const c = e.corners_lonlat; if (!c) continue;
+      const xs = c.map(p => p[0]), ys = c.map(p => p[1]);
+      if (Math.max(...xs) < lon0 || Math.min(...xs) > lon1 || Math.max(...ys) < lat0 || Math.min(...ys) > lat1) continue;
+      total++; if (ds.tiles.has(ds.key(e))) done++;
+    }
+    return { done, total, trees: !treesStale && lastBuild > lastTileAt };
+  },
+  viewState: () => viewState(),
   setYear: (i, play) => { setYearPos(i); playing = play; updatePlayButton(); },
   view: (lon, lat, d, el, az, animate) => {
     pin.visible = false; marker.visible = false; $('info').hidden = true; selected = null;
@@ -779,12 +793,18 @@ function openShared(v) {
   if (entryDisplay(X, Y)) { selectWorld(wx, wz); status(t('shared', v.lat.toFixed(5), v.lon.toFixed(5))); }
   else status(outside(), true);
 }
-function shareUrl() {
+// The current view: centre (the selected pixel if asked and any), camera distance, heading and elevation (degrees), year.
+function viewState(useSelected = false) {
   let wx = controls.target.x, wz = controls.target.z;
-  if (selected) [wx, , wz] = toWorld(frame, selected.tile.zone, selected.tile.x[selected.k], selected.tile.y[selected.k], 0);
+  if (useSelected && selected) [wx, , wz] = toWorld(frame, selected.tile.zone, selected.tile.x[selected.k], selected.tile.y[selected.k], 0);
   const [lon, lat] = utmToLonLat(...worldToDisplayUtm(frame, wx, wz), DISPLAY_ZONE);
+  return { lat, lon, d: camera.position.distanceTo(controls.target), az: THREE.MathUtils.radToDeg(controls.getAzimuthalAngle()),
+    el: 90 - THREE.MathUtils.radToDeg(controls.getPolarAngle()), year: years[Math.round(yearPos)] };
+}
+function shareUrl() {
+  const { lat, lon } = viewState(true);
   const u = new URL(location.href);
-  for (const k of ['at', 'd', 'az', 'el', 'y', 'story', 'lang']) u.searchParams.delete(k);   // the viewer's browser picks the language
+  for (const k of ['at', 'd', 'az', 'el', 'y', 'from', 'story', 'lang']) u.searchParams.delete(k);   // the viewer's browser picks the language
   u.searchParams.set('at', `${lat.toFixed(5)},${lon.toFixed(5)}`);
   u.searchParams.set('d', String(Math.round(camera.position.distanceTo(controls.target))));
   u.searchParams.set('az', String(Math.round(THREE.MathUtils.radToDeg(controls.getAzimuthalAngle()))));
@@ -874,7 +894,7 @@ function step(dt, now = performance.now()) {
   controls.update(dt);
   drawCompass();
   const dist = camera.position.distanceTo(controls.target);
-  scene.fog.density = 0.000032 * THREE.MathUtils.clamp(18000 / dist, 0.04, 1);   // thin the haze for the island view
+  scene.fog.density = 0.000032 * THREE.MathUtils.clamp(8000 / dist, 0.04, 1);    // thin the haze when zoomed out (aerial view stays readable)
   const near = THREE.MathUtils.clamp(dist * 0.002, 5, 400);
   if (Math.abs(near - camera.near) / camera.near > 0.2) { camera.near = near; camera.far = Math.max(150000, dist * 5); camera.updateProjectionMatrix(); }
   weather.update(dt, camera, controls.target, dist, { sun, hemi, fog: scene.fog });

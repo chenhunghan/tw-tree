@@ -121,6 +121,8 @@ export class Weather {
     const cs = Math.max(90000, dist * 5);
     this.clouds.position.set(target.x, U.uCloudH.value, target.z); this.clouds.scale.set(cs, cs, 1);
     this.clouds.material.uniforms.uSpan.value = cs;
+    this.clouds.material.uniforms.uFocus.value.set(target.x, target.z);
+    this.clouds.material.uniforms.uFocusR.value = Math.max(600, dist * 0.9);
     this.rain.visible = this.cur.rain > 0.02 && dist < 9000;
     if (this.rain.visible) {
       const B = THREE.MathUtils.clamp(dist * 0.7, 180, 2600);
@@ -171,7 +173,7 @@ export class Weather {
   #makeClouds() {
     const m = new THREE.ShaderMaterial({
       transparent: true, depthWrite: false, side: THREE.DoubleSide, fog: false,
-      uniforms: { ...this.uniforms, uSpan: { value: 90000 } },
+      uniforms: { ...this.uniforms, uSpan: { value: 90000 }, uFocus: { value: new THREE.Vector2() }, uFocusR: { value: 1000 } },
       vertexShader: `varying vec3 vW; varying vec2 vUv;
         #include <common>
         #include <logdepthbuf_pars_vertex>
@@ -179,7 +181,7 @@ export class Weather {
           gl_Position = projectionMatrix * viewMatrix * w;
           #include <logdepthbuf_vertex>
         }`,
-      fragmentShader: `varying vec3 vW; varying vec2 vUv; uniform float uSpan, uNight; uniform vec3 uSkyHor, uSunCol;
+      fragmentShader: `varying vec3 vW; varying vec2 vUv; uniform float uSpan, uNight, uFocusR; uniform vec2 uFocus; uniform vec3 uSkyHor, uSunCol;
         #include <logdepthbuf_pars_fragment>
         ${CLOUD_GLSL}
         void main(){
@@ -187,7 +189,10 @@ export class Weather {
           float d = cloudDensity(vW.xz);
           float edge = 1.0 - smoothstep(0.3, 0.5, length(vUv - 0.5));            // hide the plane's edge
           float camGap = smoothstep(80.0, 600.0, abs(cameraPosition.y - vW.y));    // fade when flying through
-          camGap *= mix(1.0, 0.18, smoothstep(5000.0, 40000.0, cameraPosition.y - vW.y));   // keep the map readable from far above
+          // seen from above, the layer must not hide the map: it thins with height and always opens around the focus
+          float above = smoothstep(0.0, 300.0, cameraPosition.y - vW.y);
+          float hole = smoothstep(0.45, 1.25, length(vW.xz - uFocus) / max(uFocusR, 1.0));
+          camGap *= mix(1.0, hole * mix(0.55, 0.12, smoothstep(1500.0, 20000.0, cameraPosition.y - vW.y)), above);
           float lit = 0.35 + 0.65 * uDay;
           float thick = cloudFbm((vW.xz + uCloudOff) / 900.0 + 3.0);
           vec3 c = mix(uSkyHor * 0.55, vec3(1.0), 0.55 + 0.45 * thick) * lit + uSunCol * 0.18;

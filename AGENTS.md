@@ -245,6 +245,15 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   Zhunan 41 → 21 % (2020–22), Fab 14 Tainan 37 → 20 % (1998, the ring fell too); AP7 Chiayi was farmland (crops read as
   partial cover) and Fab 22 a refinery (16 → 8 %). On phones, story mode hides the header's weather/stats rows, the legend
   and camera buttons, pulls the camera back 1.6× and shifts the image up (`setViewOffset`) above the card.
+- **Story playback and links (2026-10-01):** on open, playback holds on the start year behind a "Loading site detail
+  n/m tiles" pill until every detail tile within ~1.3 km of the outline is loaded and the trees have been rebuilt after
+  the last one arrived (or 25 s), then 1.5 s on the first year. It starts 3 years before the clearing and plays at
+  0.5 years/s through the clearing and for a year around each building's appear year, 1.2 years/s otherwise. Story links
+  take optional `at`, `d`, `az`, `el` and `from` (start year); "Share this story" writes the current view (and `from`
+  when the shown year is before the end of the clearing); the link's own view stays in the address bar until a switch.
+- **Clouds and haze (2026-10-01):** seen from above, the cloud layer (2.4 km) thins with height (to 55 % → 12 %) and
+  always clears around the focus (radius ~0.9 × camera distance); the fog density falls off from 8 km camera distance
+  (was 18 km), so zoomed-out views stay readable.
 - **Fab buildings in stories (2026-10-01):** `pipeline/analysis/site_buildings.py` adds each story's OSM building
   footprints (Overpass query in `pipeline/analysis/tsmc_buildings_overpass.txt`) to `site/stories/tsmc.json`: centroid
   inside the outline (+40 m), ≥ 400 m², not residential/religious, named ones only if fab-like (P1, CUP, 廠 …),
