@@ -236,7 +236,7 @@ export class Story {
 
   // The revenue readout for the month shown (estimate, its likely range, total so far) and the chart's marker.
   #revNow(yf) {
-    const r = this.cur.revenue, [i, mo] = this.monthAt(yf), y = Math.round(yf), key = `${y}-${mo}-${lang}`;
+    const r = this.cur.revenue, [i, mo] = this.monthAt(yf), y = Math.round(yf), key = `${y}-${mo}-${lang}-${Math.floor(this.revenueAt(yf))}`;   // + unicorns, so the count and trees per 🦄 agree
     if (key === this.revShown) return;
     this.revShown = key;
     const f = this.revenueFmt, ann = i < 0 ? 0 : r.usd[i];

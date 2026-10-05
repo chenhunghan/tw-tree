@@ -5,6 +5,9 @@
 //  - wheel / pinch: zoom toward the ground point under the pointer (pinch midpoint); double-click / double-tap: zoom in
 //  - two fingers: twist rotates, moving both up or down together tilts
 // The camera never goes below the ground (plus clearance for the canopy), and the pivot stays on the ground.
+// Cooperative mode (embedded in a page): the page keeps one-finger scrolling and the wheel, the map takes two fingers
+// (pinch, twist, tilt and pan by their midpoint) and the wheel only while `engaged` (after a click on the map, until the
+// mouse leaves) or with Ctrl/⌘ held (also a trackpad pinch); `onHint(kind)` is called when a gesture went to the page.
 import * as THREE from 'three';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -19,6 +22,7 @@ export class MapNav extends THREE.EventDispatcher {
     this.minDistance = 120; this.maxDistance = 420000; this.maxPolarAngle = Math.PI * 0.44; this.minPolarAngle = 0.02;
     this.autoRotate = false; this.autoRotateSpeed = 2;
     this.enabled = true;
+    this.cooperative = false; this.engaged = true; this.onHint = null;
     this.pointers = new Map(); this.mode = null; this.vel = new THREE.Vector2(); this.zoomGoal = null;
     this.ray = new THREE.Raycaster(); this.sph = new THREE.Spherical(); this.tmp = new THREE.Vector3();
     dom.style.touchAction = 'none';
@@ -29,6 +33,14 @@ export class MapNav extends THREE.EventDispatcher {
     dom.addEventListener('pointercancel', (e) => this.#up(e));
     dom.addEventListener('wheel', (e) => this.#wheel(e), { passive: false });
     dom.addEventListener('dblclick', (e) => this.#zoomAt(e.clientX, e.clientY, 0.45));
+    dom.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') this.engaged = false; });
+    // two or more fingers belong to the map: keep the page from scrolling or zooming (cancelable until it scrolls)
+    dom.addEventListener('touchmove', (e) => { if (this.cooperative && e.touches.length >= 2 && e.cancelable) e.preventDefault(); }, { passive: false });
+  }
+
+  setCooperative(on) {
+    this.cooperative = on;
+    this.dom.style.touchAction = on ? 'pan-x pan-y' : 'none';
   }
 
   getAzimuthalAngle() { this.sph.setFromVector3(this.tmp.copy(this.camera.position).sub(this.target)); return this.sph.theta; }
@@ -67,10 +79,14 @@ export class MapNav extends THREE.EventDispatcher {
   // ---------- pointer input ----------
   #down(e) {
     if (!this.enabled) return;
-    try { this.dom.setPointerCapture(e.pointerId); } catch {}
-    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (e.pointerType === 'mouse') this.engaged = true;
+    const coopTouch = this.cooperative && e.pointerType === 'touch';
+    if (!coopTouch) try { this.dom.setPointerCapture(e.pointerId); } catch {}
+    this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY });
     this.vel.set(0, 0); this.zoomGoal = null;
-    if (this.pointers.size === 1) {
+    if (this.pointers.size === 1 && coopTouch) {
+      this.mode = 'page';                                           // one finger scrolls the page (we may get pointercancel)
+    } else if (this.pointers.size === 1) {
       const rot = e.pointerType === 'mouse' && (e.button === 2 || e.button === 1 || e.ctrlKey || e.metaKey || e.shiftKey);
       this.mode = rot ? 'rotate' : 'pan';
       if (!rot) this.grab = this.pick(e.clientX, e.clientY);
@@ -82,6 +98,7 @@ export class MapNav extends THREE.EventDispatcher {
       this.dispatchEvent({ type: 'start' });
     } else if (this.pointers.size === 2) {
       this.mode = 'two'; this.two = this.#twoState();
+      if (this.cooperative) { this.grab = this.pick(this.two.mx, this.two.my); this.dispatchEvent({ type: 'start' }); }
     }
     this.lastT = performance.now();
   }
@@ -97,6 +114,10 @@ export class MapNav extends THREE.EventDispatcher {
     const dx = e.clientX - p.x, dy = e.clientY - p.y;
     p.x = e.clientX; p.y = e.clientY; p.dx = dx; p.dy = dy; p.t = performance.now();
     const now = performance.now(), dt = Math.max(1, now - this.lastT); this.lastT = now;
+    if (this.mode === 'page') {
+      if (!p.hinted && Math.hypot(e.clientX - p.x0, e.clientY - p.y0) > 12) { p.hinted = true; this.onHint?.('touch'); }
+      return;
+    }
     if (this.mode === 'pan' && this.pointers.size === 1) {
       const before = this.target.clone();
       this.#panTo(e.clientX, e.clientY);
@@ -119,6 +140,7 @@ export class MapNav extends THREE.EventDispatcher {
         const twist = Math.atan2(Math.sin(s.ang - o.ang), Math.cos(s.ang - o.ang));
         if (Math.abs(twist) > 0.002) this.#orbit(twist, 0);
         if (o.dist > 0 && s.dist > 0) this.#zoomToward(s.mx, s.my, o.dist / s.dist);
+        if (this.cooperative) this.#panTo(s.mx, s.my);           // two fingers also drag the map (one finger is the page's)
       }
     }
     this.dispatchEvent({ type: 'change' });
@@ -127,10 +149,12 @@ export class MapNav extends THREE.EventDispatcher {
   #up(e) {
     if (!this.pointers.has(e.pointerId)) return;
     this.pointers.delete(e.pointerId);
+    if (this.pointers.size === 1 && this.mode === 'two' && this.cooperative) { this.mode = 'page'; this.grab = null; this.dispatchEvent({ type: 'end' }); return; }
     if (this.pointers.size === 1 && this.mode === 'two') {         // lifting one finger of two: continue panning
       const [q] = this.pointers.values(); this.mode = 'pan'; this.grab = this.pick(q.x, q.y); this.vel.set(0, 0); return;
     }
     if (this.pointers.size === 0) {
+      if (this.mode === 'page') { this.mode = null; return; }
       if (this.mode !== 'pan' || performance.now() - this.lastT > 80) this.vel.set(0, 0);
       this.mode = null; this.grab = null;
       this.dispatchEvent({ type: 'end' });
@@ -139,6 +163,7 @@ export class MapNav extends THREE.EventDispatcher {
 
   #wheel(e) {
     if (!this.enabled) return;
+    if (this.cooperative && !this.engaged && !e.ctrlKey && !e.metaKey) { this.onHint?.('wheel'); return; }   // the page scrolls
     e.preventDefault();
     const px = e.deltaMode === 1 ? e.deltaY * 16 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY;
     const f = Math.exp(THREE.MathUtils.clamp(px, -200, 200) * 0.0022);

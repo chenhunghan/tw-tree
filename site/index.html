@@ -163,6 +163,37 @@
   #cam button { width: 34px; height: 34px; padding: 0; display: grid; place-items: center; }
   #cam svg { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
   #compass svg { width: 22px; height: 22px; transition: transform 0.05s linear; }
+  /* embedded (?embed=1, an iframe in a blog post): play, year and scrubber, full screen and "open full map"; a compact
+     place card; one-line credits; a hint when a gesture went to the page */
+  .embed-only, #coopHint { display: none; }
+  body.embed .embed-only { display: inline-flex; align-items: center; gap: 4px; }
+  body.embed header.panel, body.embed #cam, body.embed #minimap, body.embed #timeline .legend,
+  body.embed #story .fold-body, body.embed #story .h2-btns, body.embed #info button.fold { display: none !important; }
+  body.embed #timeline { left: 8px; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom, 0px)); padding: 6px 10px 4px; border-radius: 14px; }
+  body.embed .tl-row { gap: 8px; }
+  body.embed #play { width: 34px; height: 34px; font-size: 13px; }
+  body.embed #yearLabel { font-size: 21px; width: 2.6em; }
+  body.embed #bars { height: 10px; }
+  body.embed .tl-row a.embed-only, body.embed .tl-row button.embed-only { height: 30px; padding: 0 9px; font-size: 12px; border-radius: 9px; border: 1px solid var(--line);
+    background: var(--btn); color: var(--ink); text-decoration: none; white-space: nowrap; box-sizing: border-box; flex: none; }
+  body.embed .tl-row svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  body.embed #side { top: 8px; bottom: auto; right: 8px; width: min(250px, calc(100vw - 16px)); max-height: calc(100vh - 110px); gap: 6px; }
+  body.embed #info, body.embed #story { padding: 8px 10px; font-size: 11.5px; }
+  body.embed #info h2 { font-size: 12.5px; margin: 0; }
+  body.embed #info dl { margin: 4px 0 0; }
+  body.embed #spark { height: 44px; }
+  body.embed #story h2 { font-size: 13px; }
+  body.embed #storyNow { margin-top: 4px; gap: 10px; } body.embed #storyNow b { font-size: 16px; }
+  body.embed #storyRev { margin-top: 5px; padding-top: 5px; } body.embed #storyTrees .rng, body.embed #storyRevNow .rng { display: none; }
+  body.embed #credits { right: 8px; left: 8px; bottom: calc(70px + env(safe-area-inset-bottom, 0px)); text-align: right; background: none; opacity: 0.7;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 2px; }
+  body.embed #credits:hover { white-space: normal; background: var(--panel); }
+  body.embed #storyWait { font-size: 12px; padding: 7px 12px; }
+  body.embed #coopHint { display: grid; place-items: center; position: fixed; inset: 0; z-index: 4; pointer-events: none; opacity: 0; transition: opacity 0.25s;
+    background: rgba(20, 30, 25, 0.45); color: #fff; font-size: 17px; font-weight: 600; text-align: center; padding: 0 24px; text-shadow: 0 1px 4px rgba(0,0,0,0.4); }
+  body.embed #coopHint.show { opacity: 1; }
+  @media (max-width: 480px) { body.embed #fullMap span { display: none; } body.embed #side { width: min(220px, calc(100vw - 16px)); }
+    body.embed #ticks span:not(:first-child):not(:last-child) { display: none; } body.embed #storyRevNow, body.embed #storyNow .phase { display: none; } }
   @media (max-width: 640px) {
     #cam { top: auto; transform: none; flex-direction: row; bottom: calc(232px + env(safe-area-inset-bottom, 0px)); }
     #yearLabel { font-size: 26px; } #play { width: 38px; height: 38px; }
@@ -252,6 +283,8 @@
       <div id="bars" data-i18n-title="bars" title="Landsat scenes per year (orange: fewer than 5, low confidence)"></div>
       <div id="ticks"></div>
     </div>
+    <button type="button" id="fsBtn" class="embed-only" aria-label="Full screen" title="Full screen"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+    <a id="fullMap" class="embed-only" href="./" target="_blank" rel="noopener" data-i18n-title="fullMapTitle" title="Open this view in the full map (new tab)"><span data-i18n="fullMap">Full map</span><svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v6H4V6h6"/></svg></a>
   </div>
   <div class="legend">
     <span class="fold-body" data-i18n="legendFrac">Tree cover</span><span class="fold-body">0%</span><span class="ramp fold-body"></span><span class="fold-body">100%</span>
@@ -277,6 +310,7 @@
   <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> contributors (Nominatim)
 </div>
 
+<div id="coopHint" aria-live="polite"></div>
 <div id="loading"><div><span data-i18n="loading">Loading tree-cover data…</span><div class="bar"><i id="loadBar"></i></div><div id="loadMsg" class="note" style="margin-top:8px"></div></div></div>
 
 <dialog id="about">

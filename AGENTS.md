@@ -367,6 +367,19 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   open; choices persist in localStorage (`tpetree.fold.<name>`) except the story card, which always opens expanded
   (folded it keeps the title and the live year/site/ring numbers). Story building labels use `name_en` in English
   (OSM `name:en`, else derived from the Chinese pattern: 18廠P3 → Fab 18 P3) and skip labels that would overlap.
+- **Embedding (2026-10-05, `?embed=1`, used by the blog post chenhunghan.github.io/blog/trees-vs-unicorns/):** compact
+  chrome (play, year, scrubber, full-screen and "Full map ↗" buttons; story card always folded; compact pixel card;
+  one-line credits), no pin or selection on a shared view, pixel ratio ≤ 1.5. `play=1` autoplays a shared view from `y`.
+  Gestures are cooperative (`MapNav.setCooperative`): one finger scrolls the host page (`touch-action: pan-x pan-y`),
+  two fingers pinch/twist/tilt and drag the map; the wheel zooms only after a click on the map (until the mouse leaves)
+  or with Ctrl/⌘ (also a trackpad pinch); otherwise a hint says so. Drawing stops while the iframe is off-screen
+  (IntersectionObserver), hidden, or the host says `pause`. Messages (postMessage): to the host `{tw: 'tree', type}`:
+  `ready` (first frame with trees, or 6 s), `view` {url} (an embed URL that resumes the current view/year, a story
+  with `from`), `snapshot` {data: JPEG data URL}, `expand` {on}; from the host `{tw: 'host', type}`: `pause`, `resume`,
+  `snapshot`, `expanded` {on} (cooperative gestures are off while expanded). Narrow story embeds pull the camera back
+  1.6× and shift the image down under the card. The blog's `src/components/trees/MapEmbed.tsx` is the host: poster
+  until clicked, fade-in on `ready`, at most 2 live maps (1 on phones; the least recently seen goes, after leaving its
+  last frame as the poster), full screen via the Fullscreen API or a window cover (iPhone).
 - **Camera (2026-09-29):** (superseded by Navigation) MapControls: left-drag pans; right-drag, Shift/Ctrl/⌘+drag or a two-finger twist rotates. A
   control column (row on phones) adds rotate ±26°, tilt ±10°, and a compass that shows north and resets to north-up;
   keys Q/E rotate, R/F tilt, N north. Pending turns are eased and capped, so a held key keeps a steady pace.

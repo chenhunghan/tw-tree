@@ -27,6 +27,11 @@ const LOW_SCENES = 5;
 const $ = (id) => document.getElementById(id);
 applyDom();
 if (params.get('ui') === '0') document.body.classList.add('clean');   // capture mode (preview images): no panels
+// Embedded in another page (?embed=1, e.g. a blog post's iframe): compact chrome, the page keeps scrolling (see nav.js
+// cooperative mode), drawing pauses while off-screen, and the host page is told the view (to resume it later) and when
+// the first frame with trees is drawn (protocol: "Embedding" in AGENTS.md and the embed section below).
+const EMBED = params.get('embed') === '1';
+if (EMBED) document.body.classList.add('embed');
 
 // Foldable panels: a chevron button toggles .folded on its panel (CSS hides the .fold-body parts). The header details
 // and the timeline legend start folded to leave the view open; the choice is remembered in this browser, except for the
@@ -59,7 +64,7 @@ for (const btn of document.querySelectorAll('button.fold')) {
 const reverseZ = params.get('depth') !== 'log' && !!document.createElement('canvas').getContext('webgl2')?.getExtension('EXT_clip_control');
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance', stencil: false,
   reversedDepthBuffer: reverseZ, logarithmicDepthBuffer: !reverseZ });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, EMBED ? 1.5 : 2));
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 0.95;
@@ -139,7 +144,9 @@ function setMiniature(on) {
 }
 // On a phone the story card covers the lower half: shift the image up so the site sits above it.
 function applyViewOffset() {
-  const shift = document.body.classList.contains('story-mode') && innerWidth <= 640 ? Math.round(innerHeight * 0.2) : 0;
+  const inStory = document.body.classList.contains('story-mode');
+  // embedded: the compact card is at the top, so a narrow view moves the site down instead
+  const shift = !inStory ? 0 : !EMBED ? (innerWidth <= 640 ? Math.round(innerHeight * 0.2) : 0) : innerWidth <= 480 ? -Math.round(innerHeight * 0.08) : 0;
   if (shift) camera.setViewOffset(innerWidth, innerHeight, 0, shift, innerWidth, innerHeight); else camera.clearViewOffset();
 }
 function resize() {
@@ -233,7 +240,7 @@ async function load() {
   if (storyOk) return;
   const y = shared ? years.indexOf(shared.year) : -1;
   setYearPos(y >= 0 ? y : 0);
-  playing = y < 0; updatePlayButton();
+  playing = y < 0 || params.has('play'); updatePlayButton();
 }
 
 // A random land pixel with mid-range tree cover that changed over the timeline (full tiles, or the overview when
@@ -653,6 +660,13 @@ function renderInfo() {
     const s = prov.s[year][k], n = prov.n[year][k];
     src = s === NODATA_S ? t('iSrcNone') : `<code>${prov.meta.scenes[year][s]}</code><br><span class="note">${t('iSrcNote', n, x, y)}</span>`;
   }
+  if (EMBED) {                                   // compact: the value, elevation and the series
+    $('infoBody').innerHTML = `<dl><dt>${year}</dt><dd><b>${f === NODATA_F ? t('iNoObs') : t('iFrac') + ' ' + f + '%'}</b></dd>
+      <dt>${t('iElev')}</dt><dd>${t('iM', tile.z[k])}</dd>
+      ${tile.built?.[k] ? `<dt>${t('iBuilt')}</dt><dd>${tile.built[k] === 72 ? t('iBuilt72') : tile.built[k] === 78 ? t('iBuilt78') : t('iBuiltYear', 1900 + tile.built[k])} (GISA)</dd>` : ''}</dl>
+      ${sparkline(tile, k, year)}`;
+    return;
+  }
   $('infoBody').innerHTML = `
     <dl>
       <dt>${t('iYear')}</dt><dd>${year}</dd>
@@ -783,7 +797,7 @@ const story = new Story({
   setYear: (i, play) => { setYearPos(i); playing = play; updatePlayButton(); },
   view: (lon, lat, d, el, az, animate) => {
     pin.visible = false; marker.visible = false; $('info').hidden = true; selected = null;
-    if (camera.aspect < 0.8) d = Math.min(d * 1.6, 12000); // portrait phone: narrow horizontal view
+    if (camera.aspect < (EMBED ? 0.9 : 0.8)) d = Math.min(d * 1.6, 12000); // portrait phone (or a 4:5 embed): narrow horizontal view
     applyViewOffset();
     if (!animate) {                                        // opening link: daylight, so the change is visible
       if (!params.has('weather')) weather.setPreset('clear');
@@ -798,6 +812,7 @@ const story = new Story({
 });
 function openShared(v) {
   const [wx, wy, wz] = viewLonLat(v.lon, v.lat, v.d, v.el, v.az);
+  if (EMBED) return;                            // an embedded view is a scene, not a pinned place
   pin.position.set(wx, wy, wz); pin.visible = !document.body.classList.contains('clean');
   const [X, Y] = lonLatToUtm(v.lon, v.lat, DISPLAY_ZONE);
   if (entryDisplay(X, Y)) { selectWorld(wx, wz); status(t('shared', v.lat.toFixed(5), v.lon.toFixed(5))); }
@@ -882,11 +897,13 @@ $('aboutClose').onclick = () => $('about').close();
 
 // ---------- loop ----------
 addEventListener('resize', resize);
-let last = performance.now();
+let last = performance.now(), paused = false;
 function tick(now) {
+  if (paused) return;                     // embed off-screen: no frames until resumed
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   step(dt, now);
   composer.render(dt);
+  if (EMBED) embedTick(now);
   requestAnimationFrame(tick);
 }
 function step(dt, now = performance.now()) {
@@ -933,5 +950,86 @@ window.__app = {
   shareUrl, rebuildTrees: () => { lastFocus = null; }, get ready() { return terrain.length > 0; }, get loaded() { return { tiles: ds.tiles.size, loading: loading.size, coarse: coarse.size }; },
 };
 
+// ---------- embed (?embed=1): host page messages, pause off-screen, view handoff ----------
+// To the host (window.parent): {tw: 'tree', type: 'ready'} once the first frame with trees is drawn, {type: 'view', url}
+// whenever the view or year changes (an embed URL that resumes it), {type: 'snapshot', data} (JPEG data URL, on
+// request), {type: 'expand', on} (the reader asked for full screen / back). From the host ({tw: 'host'}): 'pause',
+// 'resume', 'snapshot', {type: 'expanded', on}.
+let hostPaused = false, inView = true, expanded = false, readySent = false, loadedAt = 0, lastView = '', lastViewAt = 0;
+const toHost = (msg) => { if (parent !== window) parent.postMessage({ tw: 'tree', ...msg }, '*'); };
+function setPaused() {
+  const p = EMBED && (hostPaused || !inView || document.hidden);
+  if (p === paused) return;
+  paused = p;
+  if (!p) { last = performance.now(); requestAnimationFrame(tick); }
+}
+// An embed URL that reopens this view (a story keeps its story, with the current year as its start while before the
+// end of the clearing); embed = false: the same view in the full app.
+function resumeUrl(embed) {
+  let u;
+  if (story.active) {
+    u = new URL(location.href);
+    for (const k of ['at', 'd', 'az', 'el', 'y', 'from']) u.searchParams.delete(k);
+    const v = viewState(), s = story.cur;
+    if (Math.hypot((v.lon - s.lon) * 101000, (v.lat - s.lat) * 111000) > 60) u.searchParams.set('at', `${v.lat.toFixed(5)},${v.lon.toFixed(5)}`);
+    u.searchParams.set('d', String(Math.round(v.d))); u.searchParams.set('az', String(Math.round(v.az))); u.searchParams.set('el', String(Math.round(v.el)));
+    if (v.year <= s.change[1]) u.searchParams.set('from', String(v.year));
+  } else u = new URL(shareUrl());
+  for (const k of ['embed', 'play', 'lang', 'ui']) u.searchParams.delete(k);
+  if (embed) {
+    u.searchParams.set('embed', '1');
+    if (params.has('lang')) u.searchParams.set('lang', params.get('lang'));
+    if (playing && !story.active) u.searchParams.set('play', '1');
+  }
+  return u.toString().replaceAll('%2C', ',');
+}
+function snapshot() {
+  composer.render(0);                     // the drawing buffer is only readable in the task that drew it
+  const src = renderer.domElement, w = Math.min(1200, src.width), h = Math.round(src.height * w / src.width);
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  c.getContext('2d').drawImage(src, 0, 0, w, h);
+  return c.toDataURL('image/jpeg', 0.82);
+}
+function setExpanded(on) {
+  expanded = on; controls.setCooperative(EMBED && !on);
+  document.body.classList.toggle('expanded', on);
+  $('fsBtn').title = $('fsBtn').ariaLabel = t(on ? 'embedShrink' : 'embedExpand');
+}
+function embedTick(now) {
+  if (!loadedAt) return;
+  if (!readySent && (lastBuild > 0 || now - loadedAt > 6000) && now - loadedAt > 300) { readySent = true; toHost({ type: 'ready' }); }
+  if (now - lastViewAt > 1000) {
+    lastViewAt = now;
+    const u = resumeUrl(true);
+    if (u !== lastView) { lastView = u; toHost({ type: 'view', url: u }); }
+  }
+}
+let hintTimer = 0;
+function hint(kind) {
+  const el = $('coopHint');
+  el.textContent = t(kind === 'touch' ? 'hintTouch' : /Mac|iPhone|iPad/.test(navigator.platform) ? 'hintWheelMac' : 'hintWheel');
+  el.classList.add('show'); clearTimeout(hintTimer); hintTimer = setTimeout(() => el.classList.remove('show'), 1600);
+}
+if (EMBED) {
+  controls.onHint = hint;
+  setExpanded(false);
+  new IntersectionObserver(([e]) => { inView = e.isIntersecting; setPaused(); }).observe(document.documentElement);
+  document.addEventListener('visibilitychange', setPaused);
+  addEventListener('message', (e) => {
+    if (e.source !== parent || e.data?.tw !== 'host') return;
+    const m = e.data;
+    if (m.type === 'pause' || m.type === 'resume') { hostPaused = m.type === 'pause'; setPaused(); }
+    else if (m.type === 'snapshot') toHost({ type: 'snapshot', data: snapshot() });
+    else if (m.type === 'expanded') setExpanded(!!m.on);
+  });
+  $('fsBtn').onclick = () => {
+    if (parent !== window) { toHost({ type: 'expand', on: !expanded }); return; }
+    if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen?.();
+  };
+  document.addEventListener('fullscreenchange', () => { if (parent === window) setExpanded(!!document.fullscreenElement); });
+  addEventListener('keydown', (e) => { if (e.key === 'Escape' && expanded && parent !== window) toHost({ type: 'expand', on: false }); });
+  $('fullMap').addEventListener('click', (e) => { e.currentTarget.href = resumeUrl(false); });
+}
+
 requestAnimationFrame(tick);
-load().catch((err) => { $('loadMsg').textContent = t('loadFail', err.message); console.error(err); });
+load().then(() => { loadedAt = performance.now(); }).catch((err) => { $('loadMsg').textContent = t('loadFail', err.message); console.error(err); });

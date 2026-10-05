@@ -50,6 +50,8 @@ const ZH = {
   sRevAria: '廠區估計營收', sRevLegend: '估計年營收', sRevRange: '可能範圍',
   langBtn: 'EN', langTitle: 'Switch to English',
   expand: '展開', collapse: '收合',
+  hintTouch: '用兩指移動地圖', hintWheel: '先點一下地圖，或按住 Ctrl 再捲動，即可縮放', hintWheelMac: '先點一下地圖，或按住 ⌘ 再捲動，即可縮放',
+  embedExpand: '全螢幕', embedShrink: '離開全螢幕',
 };
 
 const EN = {
@@ -88,6 +90,8 @@ const EN = {
   sRevAria: 'Estimated revenue of the site', sRevLegend: 'estimated revenue', sRevRange: 'likely range',
   langBtn: '中文', langTitle: '切換為中文',
   expand: 'Expand', collapse: 'Collapse',
+  hintTouch: 'Use two fingers to move the map', hintWheel: 'Click the map, or hold Ctrl while scrolling, to zoom',
+  hintWheelMac: 'Click the map, or hold ⌘ while scrolling, to zoom', embedExpand: 'Full screen', embedShrink: 'Exit full screen',
   lvl: { '完整地址': 'full address', '門牌': 'house number', '巷弄': 'lane', '路段': 'road section', '道路': 'road', '鄉鎮市區': 'district' },
 };
 
@@ -100,6 +104,8 @@ export const pickLang = (rec, base) => (base ? rec[`${base}_${lang}`] ?? rec[`${
 // index.html is written in English; Traditional Chinese (Taiwan) for its marked elements. A key prefixed with the
 // attribute (`data-i18n-title:rotL`) is used where one key's Chinese differs by attribute.
 const DOM_ZH = {
+  fullMap: "完整地圖",
+  fullMapTitle: "在完整地圖開啟這個視角（新分頁）",
   headerOpen: "搜尋、我的位置、分享",
   headerMini: "縮小",
   desc: "1984–2026 年臺灣樹冠覆蓋的 3D 時間軸，資料來自 Landsat 衛星。",
