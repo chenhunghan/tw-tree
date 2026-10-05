@@ -118,6 +118,7 @@ export class Weather {
     fog.density *= 1 + 1.6 * this.cur.rain;
     // sky dome follows the camera; clouds and rain follow the focus
     this.sky.position.copy(camera.position);
+    this.sky.scale.setScalar(Math.min(1, camera.far * 0.9 / 800000));   // inside the far plane, or a level view shows a black band above the horizon
     const cs = Math.max(90000, dist * 5);
     this.clouds.position.set(target.x, U.uCloudH.value, target.z); this.clouds.scale.set(cs, cs, 1);
     this.clouds.material.uniforms.uSpan.value = cs;

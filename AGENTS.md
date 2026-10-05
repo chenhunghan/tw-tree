@@ -272,6 +272,11 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
     `--only id,id`).
   - Social sites cache cards: refresh old links in their debuggers (Facebook Sharing Debugger, LinkedIn Post
     Inspector).
+- **Pixel journey (2026-10-05):** `pipeline/analysis/pixel_story.py` follows one real pixel (default: the largest drop inside
+  Fab 14) from its raw Landsat scene to the stored value (preview, true-colour crops, raw DN from Planetary Computer,
+  calibration, normalisation, features, all 60 tree votes; checked against the stored value) for the blog's figure.
+- **Sky dome:** scaled to 0.9 × the camera's far plane each frame; at 800 km it was clipped and level views showed a black
+  band above the horizon.
 - **Story data rebuild order:** `build_stories.py` (series, framing; rewrites `tsmc.json`) → `site_buildings.py`
   (footprints) → `fab_revenue.py` (revenue) → `render_og.py` (cards). Each later step only adds its own keys.
 - **Revenue inputs upkeep:** `tsmc_revenue_inputs.json` was researched by hand by an agent on 2026-10-01. The scripts
@@ -368,8 +373,8 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   (folded it keeps the title and the live year/site/ring numbers). Story building labels use `name_en` in English
   (OSM `name:en`, else derived from the Chinese pattern: 18廠P3 → Fab 18 P3) and skip labels that would overlap.
 - **Embedding (2026-10-05, `?embed=1`, used by the blog post chenhunghan.github.io/blog/trees-vs-unicorns/):** compact
-  chrome (play, year, scrubber, full-screen and "Full map ↗" buttons; story card always folded; compact pixel card;
-  one-line credits), no pin or selection on a shared view, pixel ratio ≤ 1.5. `play=1` autoplays a shared view from `y`.
+  chrome (a mini timeline: one slim pill with play, year, scrubber and icon-only full-screen / "full map ↗" buttons; story
+  card always folded and never clipped (no inner scrolling; revenue line hidden); compact pixel card; one-line credits), no pin or selection on a shared view, pixel ratio ≤ 1.5. `play=1` autoplays a shared view from `y`.
   Gestures are cooperative (`MapNav.setCooperative`): one finger scrolls the host page (`touch-action: pan-x pan-y`),
   two fingers pinch/twist/tilt and drag the map; the wheel zooms only after a click on the map (until the mouse leaves)
   or with Ctrl/⌘ (also a trackpad pinch); otherwise a hint says so. Drawing stops while the iframe is off-screen

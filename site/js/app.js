@@ -145,9 +145,10 @@ function setMiniature(on) {
 // On a phone the story card covers the lower half: shift the image up so the site sits above it.
 function applyViewOffset() {
   const inStory = document.body.classList.contains('story-mode');
-  // embedded: the compact card is at the top, so a narrow view moves the site down instead
+  // embedded: the compact card is top right, so the site moves down (narrow) or left of it (wider)
   const shift = !inStory ? 0 : !EMBED ? (innerWidth <= 640 ? Math.round(innerHeight * 0.2) : 0) : innerWidth <= 480 ? -Math.round(innerHeight * 0.08) : 0;
-  if (shift) camera.setViewOffset(innerWidth, innerHeight, 0, shift, innerWidth, innerHeight); else camera.clearViewOffset();
+  const shiftX = inStory && EMBED && innerWidth > 480 ? Math.round(innerWidth * 0.14) : 0;
+  if (shift || shiftX) camera.setViewOffset(innerWidth, innerHeight, shiftX, shift, innerWidth, innerHeight); else camera.clearViewOffset();
 }
 function resize() {
   const w = innerWidth, h = innerHeight;

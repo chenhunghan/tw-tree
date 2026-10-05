@@ -246,7 +246,7 @@ export class Story {
     // trees given up per unicorn: the measured canopy loss (reached across the clearing years) over unicorns so far
     const s = this.cur, ramp = Math.max(0, Math.min(1, (yf - s.change[0] + 0.5) / (s.change[1] - s.change[0] + 1)));
     const trees = Math.round(s.lost_ha * ramp * 10000 / TREE_M2 / 100) * 100, uni = Math.floor(cum);
-    $('storyTrees').innerHTML = trees > 0 ? t('sTreesLost', trees.toLocaleString(), uni ? (trees / uni >= 10 ? Math.round(trees / uni) : (trees / uni).toFixed(1)) : null, TREE_M2) : '';
+    $('storyTrees').innerHTML = trees > 0 ? t('sTreesLost', trees.toLocaleString(), uni ? (trees / uni >= 10 ? Math.round(trees / uni).toLocaleString() : (trees / uni).toFixed(1)) : null, TREE_M2) : '';
     $('storyRevNow').innerHTML = [v > 0 ? t('sRevNow', when, f(v), f(v * kLo), f(v * kHi)) : '', cum > 0 ? t('sRevCum', f(cum)) : ''].filter(Boolean).join(' · ');
     const rl = $('storyRevYear');
     if (rl) { const x = this.rxp(y - 0.5 + (mo + 0.5) / 12); rl.setAttribute('x1', x); rl.setAttribute('x2', x); }
