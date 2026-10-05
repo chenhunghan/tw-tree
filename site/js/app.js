@@ -872,6 +872,7 @@ function syncWeatherUi() {
   weather.setPreset(params.get('weather') in PRESETS ? params.get('weather') : presets[Math.random() < 0.6 ? 0 : Math.random() < 0.7 ? 1 : 2]);
   weather.setHour(params.has('hour') ? +params.get('hour') : 6.5 + Math.random() * 9);
   weather.cur = { ...PRESETS[weather.preset] };
+  if (params.get('time') === 'auto') weather.auto = true;   // the clock runs from `hour` (e.g. golden hour into dusk)
   syncWeatherUi();
 }
 $('tilt').onclick = () => setMiniature(!miniature);
