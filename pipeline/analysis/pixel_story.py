@@ -29,6 +29,7 @@ ap.add_argument('--story', default='tsmc-fab14')
 ap.add_argument('--out-json', required=True)
 ap.add_argument('--out-img', required=True)
 ap.add_argument('--crop', type=int, default=64, help='crop size in pixels (30 m)')
+ap.add_argument('--thumbs', default='', help='years for the small crops, e.g. 1995,1997,2000,2015,2025 (avoid Landsat 7 SLC-off years: stripes)')
 a = ap.parse_args()
 out_img = pathlib.Path(a.out_img).expanduser(); out_img.mkdir(parents=True, exist_ok=True)
 
@@ -139,7 +140,7 @@ im = Image.open(io.BytesIO(prev)).convert('RGB'); im.thumbnail((720, 720)); im.s
 tr = item.assets['red'].extra_fields.get('proj:transform') or item.properties['proj:transform']
 shape = item.assets['red'].extra_fields.get('proj:shape') or item.properties['proj:shape']
 rgb_crop(item, a.crop, out_img / 'crop.jpg')
-series_years = [yy for yy in (before[0], Yd, c1 + 2, 2010, years[-2]) if yy in years]
+series_years = [yy for yy in ([int(v) for v in a.thumbs.split(',')] if a.thumbs else (before[0], Yd, c1 + 2, 2015, years[-2])) if yy in years]
 thumbs = []
 for yy in dict.fromkeys(series_years):
     sid = scene_id(yy)
