@@ -155,7 +155,8 @@ function resize() {
   camera.aspect = w / h; camera.updateProjectionMatrix(); applyViewOffset();
   renderer.setSize(w, h); composer.setSize(w, h);
   bloom.setSize(Math.ceil(w * renderer.getPixelRatio() / 2), Math.ceil(h * renderer.getPixelRatio() / 2));   // faint glow: half-res mips are plenty
-  tiltH.uniforms.h.value = 3.2 / w; tiltV.uniforms.v.value = 3.2 / h;
+  const tilt = EMBED ? 1.4 : 3.2;     // embeds are small: full strength blurred about a third of the frame
+  tiltH.uniforms.h.value = tilt / w; tiltV.uniforms.v.value = tilt / h;
 }
 resize();
 const terrainMat = makeTerrainMaterial(uniforms);

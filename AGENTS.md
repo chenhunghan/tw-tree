@@ -374,7 +374,7 @@ site/data/<name>/         index.json, summary.parquet, overview.arrow.gz, <zone>
   (OSM `name:en`, else derived from the Chinese pattern: 18廠P3 → Fab 18 P3) and skip labels that would overlap.
 - **Embedding (2026-10-05, `?embed=1`, used by the blog post chenhunghan.github.io/blog/trees-vs-unicorns/):** compact
   chrome (a mini timeline: one slim pill with play, year, scrubber and icon-only full-screen / "full map ↗" buttons; story
-  card always folded and never clipped (no inner scrolling; revenue line hidden); compact pixel card; one-line credits), no pin or selection on a shared view, pixel ratio ≤ 1.5. `play=1` autoplays a shared view from `y`. `time=auto` lets the clock run from `hour` (any page).
+  card always folded and never clipped (no inner scrolling; revenue line hidden); compact pixel card; one-line credits), no pin or selection on a shared view, pixel ratio ≤ 1.5. `play=1` autoplays a shared view from `y`. Tilt-shift is 1.4/3.2 of full strength in embeds. `time=auto` lets the clock run from `hour` (any page).
   Gestures are cooperative (`MapNav.setCooperative`): one finger scrolls the host page (`touch-action: pan-x pan-y`),
   two fingers pinch/twist/tilt and drag the map; the wheel zooms only after a click on the map (until the mouse leaves)
   or with Ctrl/⌘ (also a trackpad pinch); otherwise a hint says so. Drawing stops while the iframe is off-screen
